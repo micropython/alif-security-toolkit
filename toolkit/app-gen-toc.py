@@ -685,7 +685,7 @@ def main():
     parser.add_argument(
         "--config-dir",
         type=str,
-        default="",
+        default=Path(os.path.dirname(__file__)) / "build/config",
         help="directory with configuration files",
     )
     parser.add_argument(
