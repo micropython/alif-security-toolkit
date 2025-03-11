@@ -4,24 +4,30 @@ device_probe.py
 discovery class for finding out what is on the other end of the SE-UART
 """
 
-import sys
 import struct
-from isp_core import isp_start
-from isp_core import isp_stop
-from isp_core import isp_build_packet
-from isp_util import close_isp_and_exit
-from utils.config import *
+
+from isp.isp_core import isp_start
+from isp.isp_core import isp_stop
+from isp.isp_core import isp_build_packet
+from isp.isp_util import close_isp_and_exit
+from utils.config import (
+    ALIF_EAGLE_OSPI_PACKAGE_SIZE,
+    HASHES_DB_FILE,
+    OSPI0_MEM_ADDRESS,
+    OSPI1_MEM_ADDRESS,
+    read_global_config,
+)
 
 # from utils.toc_common import ALIF_PACKAGE_SIZE
-from isp_protocol import ISP_COMMAND_DATA_RESPONSE
-from isp_protocol import ISP_COMMAND_ENQUIRY
-from isp_protocol import ISP_COMMAND_GET
-from isp_protocol import ISP_PACKET_DATA_FIELD
-from isp_protocol import ISP_PACKET_COMMAND_FIELD
-from isp_protocol import ISP_SOURCE_SEROM
-from isp_protocol import ISP_SOURCE_SERAM
-from isp_protocol import ISP_GET_REVISION
-from isp_protocol import ISP_GET_OSPI_PARAMETERS
+from isp.isp_protocol import ISP_COMMAND_DATA_RESPONSE
+from isp.isp_protocol import ISP_COMMAND_ENQUIRY
+from isp.isp_protocol import ISP_COMMAND_GET
+from isp.isp_protocol import ISP_PACKET_DATA_FIELD
+from isp.isp_protocol import ISP_PACKET_COMMAND_FIELD
+from isp.isp_protocol import ISP_SOURCE_SEROM
+from isp.isp_protocol import ISP_SOURCE_SERAM
+from isp.isp_protocol import ISP_GET_REVISION
+from isp.isp_protocol import ISP_GET_OSPI_PARAMETERS
 
 # definitions
 
@@ -188,7 +194,6 @@ class device_get_attributes:
                 hbk0 += l
             hbk0 = hbk0.lower()
 
-            HASHES_DB_FILE = "utils/hashesDB.db"
             # read hashes DB
             HASHES_DB = read_global_config(HASHES_DB_FILE)
             env = "PROD"

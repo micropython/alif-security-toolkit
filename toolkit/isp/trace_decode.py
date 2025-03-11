@@ -11,7 +11,7 @@ trace buffer decoder (SEROM and SERAM)
 # pylint: disable=invalid-name,superfluous-parens,anomalous-unicode-escape-in-string, too-many-locals, too-many-statements, too-many-branches, line-too-long, too-many-arguments
 
 # Import definitions from trace_definitions.py
-from trace_definitions import *
+from isp.trace_definitions import *
 
 # --- Debug Configuration ---
 DEBUG_PRINT_ENABLE = False  # Set to True to enable detailed debug prints

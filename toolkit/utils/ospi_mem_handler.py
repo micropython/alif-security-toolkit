@@ -1,6 +1,6 @@
 #!/usr/bin/python3
-from isp_core import *
-from isp_util import *
+from isp.isp_core import *
+from isp.isp_util import *
 
 
 class OSPIMemoryHandler:

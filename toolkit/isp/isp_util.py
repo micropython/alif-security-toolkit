@@ -9,8 +9,7 @@ import os
 import sys
 import subprocess
 import random
-from isp_core import *
-from utils.toc_common import *
+from isp.isp_core import *
 import time
 
 DATA_CHUNK_SIZE = 240
@@ -42,6 +41,8 @@ def progress_bar(fileName, currentSize=0, maxSize=0, enablePrint=True, unit=None
     if maxSize <= 0:
         print("\n")
         return False
+
+    fileName = os.path.basename(fileName)
 
     progress = int((currentSize / float(maxSize)) * 100)
 
@@ -102,10 +103,6 @@ def send_authentication_command(isp, command, token):
     # isp_wait(isp)
     message = isp_readmessage(isp)
     isp_decode_packet(isp, "RX<-- ", message)
-
-
-certPath = Path("cert/")
-imagePath = Path("build/images")
 
 
 def authenticate_image(isp, fileName):

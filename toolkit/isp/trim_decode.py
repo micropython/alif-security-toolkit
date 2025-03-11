@@ -14,7 +14,7 @@ __author__ onyettr
 import struct
 
 # import json
-from isp_print import isp_print_color
+from isp.isp_print import isp_print_color
 
 
 class MfrDataTrimDecoder:

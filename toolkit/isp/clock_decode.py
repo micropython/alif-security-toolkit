@@ -8,7 +8,7 @@ __author__ onyettr
 # pylint: disable=unused-argument, invalid-name, consider-using-f-string
 import struct
 import ctypes
-from isp_print import isp_print_color
+from isp.isp_print import isp_print_color
 
 c_uint32 = ctypes.c_uint32
 

@@ -8,7 +8,7 @@ __author__ onyettr
 """
 
 # pylint: disable=unused-argument, invalid-name
-from isp_protocol import ISP_PACKET_DATA_FIELD
+from isp.isp_protocol import ISP_PACKET_DATA_FIELD
 
 # Colour table for ANSI terminal printing
 ansi_fg_colour = {
