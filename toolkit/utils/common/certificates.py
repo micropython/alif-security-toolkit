@@ -11,6 +11,7 @@ from utils.common import global_defines
 from utils.common import flags_global_defines
 from utils.common import cryptolayer
 from utils.common.exceptions import CertCreationError
+from utils import paths
 
 
 # *******************************************************************
@@ -295,6 +296,10 @@ class ContentArmCertificateBody(ArmCertificateBody):
         crypto_type,
         logger=None,
     ):
+        # Compute correct path.
+        assert images_table.startswith("../build/images/")
+        images_table = paths.OUTPUT_DIR / images_table.split("/", 3)[3]
+
         self.logger = logger
         self._sw_version = sw_version
         self._images_table_filename = images_table

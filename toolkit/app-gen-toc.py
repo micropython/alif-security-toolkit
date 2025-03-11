@@ -22,14 +22,26 @@ import argparse
 from pathlib import Path
 import zlib
 import json
-from utils import toc_common
-from utils.config import *
-from utils.toc_common import *
-from json.decoder import JSONDecodeError
+import utils
+from utils.config import load_global_config, read_global_config
 from utils.device_config import gen_device_config
 from utils.sign_image_util import sign_image
-from printInfo import *
-from utils.gen_fw_cfg import *
+from utils.printInfo import printInfo, verboseModeSet
+from utils import paths
+from utils.toc_common import (
+    addContentCertificate,
+    cleanBuild,
+    compressImage,
+    createContentCerts,
+    getBlob,
+    getCPUID,
+    getImageSize,
+    getObjectFlags,
+    getObjectType,
+    getObjectVersion,
+    read_json_file,
+    validateOptions,
+)
 
 # Define Version constant for each separate tool
 # 0.30.000      includes image signing
@@ -80,9 +92,6 @@ image_switcher = {"DEVICE": 3}
 cpuid_switcher = {"A32_0": 0, "A32_1": 1, "M55_HP": 2, "M55_HE": 3}
 
 
-certPath = Path("cert/")
-imagePath = Path("build/images")
-
 # sizes of Certificates
 CERT_CHAIN_SIZE = utils.toc_common.CERT_CHAIN_SIZE
 CONT_CERT_SIZE = utils.toc_common.CONT_CERT_SIZE
@@ -102,6 +111,8 @@ def createOemTocPackage(fwsections, outputFile):
     global otocStartAddress
     global unmanaged
 
+    certPath = paths.CERT_INPUT_DIR
+
     print("Creating APP TOC Package...")
     # Start by loading the Key1/Key2 Certificates for later on
     printInfo("Loading Key1 Cert...")
@@ -113,7 +124,7 @@ def createOemTocPackage(fwsections, outputFile):
     outf = open(outputFile, "wb")
 
     # create a memory layout map for debugging
-    mapf = open("build/app-package-map.txt", "w")
+    mapf = open(paths.OUTPUT_DIR / "app-package-map.txt", "w")
     mapf.write("* * * User managed MRAM locations* * * \n")
 
     debugScript = ""
@@ -128,8 +139,8 @@ def createOemTocPackage(fwsections, outputFile):
 
         printInfo(img)
         mapf.write(f"{img[1]}\t{hex(img[2])}\t{img[2]}\t{img[3]}\t{imgFile}\n")
-        debugScript += "../build/images/" + imgFile + " " + img[1] + " "
-        sign_image("build/images/" + imgFile, int(img[1], 16), 0xFFFFFFFF, "OEM")
+        debugScript += imgFile + " " + img[1] + " "
+        sign_image(imgFile, int(img[1], 16), 0xFFFFFFFF, "OEM")
 
     # create a pointer to keep track addresses of components (object_address in OTOC)
     mPointer = oemManagedAreaStartAddress
@@ -161,7 +172,9 @@ def createOemTocPackage(fwsections, outputFile):
             mPointer += CERT_CHAIN_SIZE - CONT_CERT_SIZE
             # print(f'mPointer KC un: {mPointer - oemManagedAreaStartAddress}')
         # copy the Content Certificate (for signed or unsigned images)
-        addContentCertificate(outf, sec["binary"] + "_" + str(sec["mramAddress"]))
+        addContentCertificate(
+            outf, os.path.basename(sec["binary"]) + "_" + str(sec["mramAddress"])
+        )
         # mapf.write(f"{hostAddress(mPointer)}\t{hex(CONT_CERT_SIZE)}\t{(CONT_CERT_SIZE)}\tSB" + sec['binary'] + ".crt\n")
         mapf.write(
             f"{hex(mPointer)}\t{hex(CONT_CERT_SIZE)}\t{(CONT_CERT_SIZE)}\tSB"
@@ -198,7 +211,9 @@ def createOemTocPackage(fwsections, outputFile):
             mPointer += CERT_CHAIN_SIZE - CONT_CERT_SIZE
             # print(f'mPointer - KCs: {mPointer - oemManagedAreaStartAddress}')
         # copy the Content Certificate (for signed or unsigned images)
-        addContentCertificate(outf, sec["binary"] + "_" + str(sec["mramAddress"]))
+        addContentCertificate(
+            outf, os.path.basename(sec["binary"]) + "_" + str(sec["mramAddress"])
+        )
         # mapf.write(f"{hostAddress(mPointer)}\t{hex(CONT_CERT_SIZE)}\t{(CONT_CERT_SIZE)}\tSB" + sec['binary'] + ".crt\n")
         mapf.write(
             f"{hex(mPointer)}\t{hex(CONT_CERT_SIZE)}\t{(CONT_CERT_SIZE)}\tSB"
@@ -216,7 +231,7 @@ def createOemTocPackage(fwsections, outputFile):
             binFile += ".lzf"
 
         # print("Copying: " + binFile)
-        outf.write(getBlob(imagePath / binFile))
+        outf.write(getBlob(binFile))
         # mapf.write(f"{hostAddress(mPointer)}\t{hex(sec['size'])}\t{sec['size']}\t" + binFile + "\n")
         mapf.write(
             f"{hex(mPointer)}\t{hex(sec['size'])}\t{sec['size']}\t" + binFile + "\n"
@@ -358,7 +373,7 @@ def createOemTocPackage(fwsections, outputFile):
 
     mapf.write("\n* * * END of APP Package * * * \n")
 
-    debugScript += "../" + outputFile + " " + hex(oemManagedAreaStartAddress)
+    debugScript += outputFile + " " + hex(oemManagedAreaStartAddress)
 
     # close the file
     outf.close()
@@ -366,7 +381,7 @@ def createOemTocPackage(fwsections, outputFile):
     mapf.close()
 
     # generate debug script file
-    dsFile = "bin/application_package.ds"  # Was bin/oempackage.ds
+    dsFile = paths.OUTPUT_DIR / "application_package.ds"  # Was bin/oempackage.ds
     try:
         ds = open(dsFile, "w")
         # f.write('reset system\n')
@@ -410,7 +425,7 @@ def calcOemManagedArea(fwsections):
         numImages += 1
 
         # determine the size of file and if padding is needed
-        fsize, padlen = getImageSize("build/images/" + sec["binary"])
+        fsize, padlen = getImageSize(sec["binary"])
         # update the size and padding information
         sec["size"] = fsize
         sec["padlen"] = padlen
@@ -420,11 +435,11 @@ def calcOemManagedArea(fwsections):
         compressLabel = "uncompressed"
         if "COMPRESS" in sec["flags"]:
             compressLabel = "compressed"
-            compressImage("build/images/" + sec["binary"])
+            compressImage(sec["binary"])
             # we should have the (new) compressed file, so we will check if this is the case...
 
             # determine the size of (compressed) file and if padding is needed
-            fsize, padlen = getImageSize("build/images/" + sec["binary"] + ".lzf")
+            fsize, padlen = getImageSize(sec["binary"] + ".lzf")
             # add compressed file size and update padding information
             # (the compressed image will be included in the package so pad should be calculated for
             # compressed file size)
@@ -601,16 +616,27 @@ def validateVersAttr(version):
 
 
 def updateDeviceConfig(file):
+    file = paths.CONFIG_INPUT_DIR / file
     # print('*** updateDeviceConfig: ', file)
     # Update the firewall configuration in the OEM DEVICE config file
-    update_fw_cfg_oem(file)
+    # This doesn't do anything except format the json file.
+    # update_fw_cfg_oem(file)
 
-    cfg = read_global_config("build/config/" + file)
+    cfg = read_global_config(file)
     if "miscellaneous" in cfg:
+        unwanted_item = False
         for item in cfg["miscellaneous"]:
-            item.pop("sdesc", None)
-            item.pop("ldesc", None)
-            item.pop("options", None)
+            if "sdesc" in item or "ldesc" in item or "options" in item:
+                unwanted_item = True
+        if unwanted_item:
+            print(
+                "[ERROR] File '"
+                + file.as_posix()
+                + "' should not contain 'miscellaneous' entry"
+            )
+            sys.exit(EXIT_WITH_ERROR)
+    # Don't write out the json file, because it didn't change.
+    return
     with open("build/config/" + file, "w") as json_file:
         json.dump(cfg, json_file, indent=2)
 
@@ -658,8 +684,33 @@ def main():
         action="store_true",
     )
     parser.add_argument("-v", "--verbose", help="verbosity mode", action="store_true")
+    parser.add_argument(
+        "--config-dir",
+        type=str,
+        default=Path(os.path.dirname(__file__)) / "build/config",
+        help="directory with configuration files",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="",
+        help="directory to place output files",
+    )
+    parser.add_argument(
+        "--firmware-dir",
+        type=str,
+        default="",
+        help="directory contianing firmware files",
+    )
 
     args = parser.parse_args()
+
+    # Set paths given on command line.
+    paths.TOOLKIT_DIR = Path(os.path.dirname(__file__))
+    paths.CERT_INPUT_DIR = paths.TOOLKIT_DIR / "cert"
+    paths.CONFIG_INPUT_DIR = Path(args.config_dir)
+    paths.FIRMWARE_INPUT_DIR = Path(args.firmware_dir)
+    paths.OUTPUT_DIR = Path(args.output_dir)
 
     if args.version:
         print(TOOL_VERSION)
@@ -715,12 +766,15 @@ def main():
 
         # update the size and padding information
         if sec["identifier"].strip("\0") != "DEVICE":
+            sec["binary"] = (paths.FIRMWARE_INPUT_DIR / sec["binary"]).as_posix()
             continue
 
         print("Generating Device Configuration for: " + sec["binary"])
         updateDeviceConfig(sec["binary"])
         gen_device_config(sec["binary"], False)
-        sec["binary"] = sec["binary"][:-5] + ".bin"
+        sec["binary"] = (
+            (paths.OUTPUT_DIR / sec["binary"]).with_suffix(".bin").as_posix()
+        )
 
     #     also check unmanaged images (mramAddress != 0) are between boundaries (OEM_BASE_ADDRESS - only in Rev_A as in Rev_B will be 0)
     #     and images don't overlap... Also, advice is GAPs (big ones) exist - especially if tool can't create the layout...
@@ -746,7 +800,6 @@ def main():
 
     sign_image(args.output, oemManagedAreaStartAddress, 0xFFFFFFFF, "OEM")
 
-    print("Done!")
     return 0
 
 

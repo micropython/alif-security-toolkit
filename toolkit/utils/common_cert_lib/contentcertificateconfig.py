@@ -8,8 +8,7 @@ import configparser
 from utils.common.util_logger import UtilLogger
 from utils.common.exceptions import ConfigParsingError
 from utils.common import global_defines
-
-from printInfo import *
+from utils.printInfo import verboseModeGet
 
 
 class ContentCertificateConfig:

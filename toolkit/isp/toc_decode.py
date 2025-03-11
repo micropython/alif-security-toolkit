@@ -8,7 +8,7 @@ __author__ onyettr
 
 # pylint: disable=unused-argument, invalid-name
 import struct
-from isp_print import isp_print_color
+from isp.isp_print import isp_print_color
 
 # CPU Values
 TOC_IMAGE_CPU_ID_MASK = 0x0000000F

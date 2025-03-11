@@ -11,17 +11,18 @@ updateSystemPackage.py
 import os
 import sys
 import argparse
+from pathlib import Path
 
-sys.path.append("./isp")
-from serialport import serialPort
-from serialport import COM_BAUD_RATE_MAXIMUM
+from isp.serialport import serialPort
+from isp.serialport import COM_BAUD_RATE_MAXIMUM
 
 # import ispcommands
-from isp_core import *
-from isp_util import *
-import device_probe
+from isp.isp_core import *
+from isp.isp_util import *
+from isp import device_probe
 import utils.config
 from utils.config import *
+from utils import paths
 
 # Define Version constant for each separate tool
 #  Version                  Feature
@@ -112,6 +113,10 @@ def main():
     )
     parser.add_argument("-v", "--verbose", help="verbosity mode", action="store_true")
     args = parser.parse_args()
+
+    # Set paths.
+    paths.TOOLKIT_DIR = Path(os.path.dirname(__file__))
+
     if args.version:
         print(TOOL_VERSION)
         sys.exit()
@@ -222,6 +227,9 @@ def main():
     alif_image = "alif/" + DEVICE_PACKAGE + "-" + rev_ext + env_ext + ".bin"
     alif_offset = "alif/" + DEVICE_OFFSET + "-" + rev_ext + env_ext + ".bin"
 
+    alif_image = (paths.TOOLKIT_DIR / alif_image).as_posix()
+    alif_offset = (paths.TOOLKIT_DIR / alif_offset).as_posix()
+
     if sys.platform in ["linux", "darwin"]:
         imageList = (
             alif_image
@@ -234,11 +242,9 @@ def main():
         )
     else:
         imageList = (
-            "../"
-            + alif_image
+            alif_image
             + " "
             + hex(ALIF_BASE_ADDRESS)
-            + " ../"
             + alif_offset
             + " "
             + hex(MRAM_BASE_ADDRESS + MRAM_SIZE - 16)

@@ -14,22 +14,29 @@ __status__ = "Dev"    "
 
 import os
 import sys
-import signal
 import argparse
-from utils.discover import getValues, getJlinkSN
+from utils.discover import getJlinkSN
 import utils.config
-from utils.config import *
+from utils.config import load_global_config, getPartDescription
 from utils.user_validations import validateArgList
 
-sys.path.append("./isp")
-from serialport import serialPort
-from serialport import COM_BAUD_RATE_MAXIMUM
+from isp.serialport import serialPort
+from isp.serialport import COM_BAUD_RATE_MAXIMUM
+from utils.toc_common import globalToLocalAddress
 
 # import ispcommands
-from isp_core import *
-from isp_util import *
-import device_probe
-import pylink
+from isp.isp_core import (
+    CtrlCHandler,
+    isp_get_maintenance_status,
+    isp_mram_erase,
+    isp_reset,
+    isp_set_baud_rate,
+    isp_show_maintenance_mode,
+    isp_start,
+    isp_stop,
+)
+from isp.isp_util import put_target_in_maintenance_mode, burn_mram_isp
+from isp import device_probe
 import datetime
 # from array import array
 
@@ -267,11 +274,14 @@ def main():
                 print("[ERROR] erase arguments are empty")
                 sys.exit(EXIT_WITH_ERROR)
             argList += args.erase
-    elif args.images != "Application TOC Package":
-        argList = args.images
-    else:
-        dsFile = "bin/application_package.ds"
+    elif args.images == "Application TOC Package" or args.images.startswith("file:"):
+        if args.images.startswith("file:"):
+            dsFile = args.images.removeprefix("file:")
+        else:
+            dsFile = "bin/application_package.ds"
         argList = readImageList(dsFile)
+    else:
+        argList = args.images
 
     if args.skip:
         idx = argList.find("../build/AppTocPackage.bin 0x")
@@ -286,6 +296,8 @@ def main():
     print("[INFO]", action + argList)
 
     if method == "jtag" and not args.erase:  # erase via jtag not yet supported!
+        import pylink
+
         jlinkSN = getJlinkSN()
         if jlinkSN == -1:
             print("J-Link device not found!")

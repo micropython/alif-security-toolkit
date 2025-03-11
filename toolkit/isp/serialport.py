@@ -22,7 +22,7 @@ import time
 import threading
 import serial
 from serial.tools import list_ports
-from isp_protocol import ISP_STATUS_READER_STOP, ISP_UNKNOWN_COMMAND, ISP_SUCCESS
+from isp.isp_protocol import ISP_STATUS_READER_STOP, ISP_UNKNOWN_COMMAND, ISP_SUCCESS
 
 # Serial defaults
 COM_FILE_DEFAULT = "isp_config_data.cfg"
@@ -174,18 +174,21 @@ class serialPort:
 
         return checkBytes + inputType([checkSumByte])
 
-    def openSerial(self):
+    def openSerial(self, port):
         """
         openSerial
         - Open the Serial port
         """
         self.PrintStr("[DBG] openSerial STARTS")
 
+        self.portName = port
+        """
         # read config file - if it doesnt exist we can discover
         try:
             self.portName, self.baudRate = self.getSerialFile(COM_FILE_DEFAULT)
         except:
             self.discoverSerialPorts()
+        """
 
         self.serialData.port = self.portName
         self.serialData.baudrate = self.baudRate
