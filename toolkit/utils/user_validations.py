@@ -46,10 +46,7 @@ def validateItems(items, pad):
                 # validate file
                 # get file size to check existance
                 try:
-                    # mram_burner runs in bin/ folder so all references would
-                    # have '../' to land into tools root directory and describe the path from there...
-                    # GUI will solve all these limitations.
-                    fPath = item[key][3:]
+                    fPath = item[key]
                     fSize = os.path.getsize(fPath)
                     if (fSize % 16) != 0:
                         print("File size = %d" % fSize)

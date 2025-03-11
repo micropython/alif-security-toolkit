@@ -12,7 +12,7 @@ __author__ onyettr
 # pylint: disable=unused-argument, line-too-long, invalid-name
 # pylint: disable=consider-using-f-string, f-string-without-interpolation
 import struct
-from isp_print import isp_print_color
+from isp.isp_print import isp_print_color
 
 
 class MfrDataTrimDecoder:

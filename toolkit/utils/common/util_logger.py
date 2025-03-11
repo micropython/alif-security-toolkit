@@ -6,7 +6,7 @@
 import sys
 import logging
 
-# from utils.printInfo import *
+from utils.printInfo import verboseModeGet
 
 
 class UtilLogger:
@@ -24,10 +24,10 @@ class UtilLogger:
 
         self.root_logger.addHandler(self.log_file_handler)
         self.root_logger.setLevel(logging.INFO)
-        # if verboseModeGet():
-        self.root_logger.info(
-            utility_name + " Utility started (Logging to " + self.log_filename + ")"
-        )
+        if verboseModeGet():
+            self.root_logger.info(
+                utility_name + " Utility started (Logging to " + self.log_filename + ")"
+            )
 
     def info(self, message):
         self.root_logger.info(message)

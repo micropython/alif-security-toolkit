@@ -6,8 +6,8 @@ __author__ onyettr
 """
 
 # pylint: disable=unused-argument, invalid-name, consider-using-f-string
-from isp_print import isp_print_color
-from version_decode import display_string
+from isp.isp_print import isp_print_color
+from isp.version_decode import display_string
 
 SERAM_LOADING_OPTS_LUT = {
     0: "MRAM Only",

@@ -7,9 +7,9 @@ __author__ onyettr
 
 # pylint: disable=unused-argument, invalid-name, consider-using-f-string
 import struct
-from isp_print import isp_print_color
-from toc_decode import format_hex, format_cpu
-from toc_decode import TOC_IMAGE_CPU_LAST
+from isp.isp_print import isp_print_color
+from isp.toc_decode import format_hex, format_cpu
+from isp.toc_decode import TOC_IMAGE_CPU_LAST
 
 
 def display_cpu_info(message):

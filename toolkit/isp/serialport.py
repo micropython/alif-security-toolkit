@@ -22,7 +22,7 @@ import time
 import threading
 import serial
 from serial.tools import list_ports
-from isp_protocol import ISP_STATUS_READER_STOP, ISP_UNKNOWN_COMMAND, ISP_SUCCESS
+from isp.isp_protocol import ISP_STATUS_READER_STOP, ISP_UNKNOWN_COMMAND, ISP_SUCCESS
 
 # Serial defaults
 COM_FILE_DEFAULT = "isp_config_data.cfg"

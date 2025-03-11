@@ -18,15 +18,14 @@ TODO:
 # pylint: disable=unused-argument, invalid-name, bare-except
 import sys
 
-sys.path.append("./isp")
-from isp_protocol import *
-from isp_core import *
-from isp_util import *
+from isp.isp_protocol import *
+from isp.isp_core import *
+from isp.isp_util import *
 import utils.config
 from utils.config import *
 from utils.user_validations import validateArgList
 from utils.ospi_mem_handler import OSPIMemoryHandler
-import device_probe
+from isp import device_probe
 import time
 
 # Probe error codes

@@ -12,6 +12,7 @@ __status__ = "Dev"
 from pathlib import Path
 from utils.toc_common import *
 from utils.common.certificates import getKeyCertificatePath
+from utils import paths
 
 # 0.3.000 - added support for Azure Storage (Public Keys and Certs)
 # 0.4.000 - split image signature functionality
@@ -20,15 +21,14 @@ TOOL_VERSION = "0.5.000"  # Define Version constant for each separate tool
 
 # EXIT_WITH_ERROR = 1
 
-certPath = Path("cert/")
-imagePath = Path("build/images")
-
 
 # A simplified copy of createContentCerts (in toc_common.py) with some modified paths
 def create_content_certs(sec, prefix, config_file):
     """
     create a content certificate for an image
     """
+    certPath = imagePath = Path(paths.OUTPUT_DIR)
+
     print("Creating Signature...")
     try:
         file = open(imagePath / "images.txt", "w")
@@ -43,7 +43,6 @@ def create_content_certs(sec, prefix, config_file):
     encrypt = "0"
 
     binfile = sec["binary"]
-    binfile = "../" + binfile
     print("Binary File: ", binfile)
     file.write(
         binfile
@@ -58,11 +57,8 @@ def create_content_certs(sec, prefix, config_file):
     )
     file.close()
 
-    os.chdir(os.getcwd() + "/utils/")
-    cert_sb_content_util.main(
-        ["-c", "cfg/" + configFile, "-l", "../build/logs/SBContent.log"]
-    )
-    os.chdir(os.getcwd() + "/../")
+    cfg_file = paths.TOOLKIT_DIR / "utils" / "cfg" / configFile
+    cert_sb_content_util.main(["-c", cfg_file, "-l", certPath / "SBContent.log"])
 
     # check if file exists (and remove it) before renaming it
     # certFile = "SB" + sec['binary'] + ".crt"
@@ -103,8 +99,8 @@ def sign_image(fileName, destAddress, loadAddress, signature_type):
         # key2_cert = "cert/ICVSBKey2.crt"
         key2_cert = getKeyCertificatePath() + "/ICVSBKey2.crt"
     elif signature_type == "OEM":
-        key1_cert = "cert/OEMSBKey1.crt"
-        key2_cert = "cert/OEMSBKey2.crt"
+        key1_cert = paths.CERT_INPUT_DIR / "OEMSBKey1.crt"
+        key2_cert = paths.CERT_INPUT_DIR / "OEMSBKey2.crt"
     else:
         print("Auth Host can only be 'ICV' or 'OEM'")
         sys.exit(EXIT_WITH_ERROR)

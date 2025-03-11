@@ -3,8 +3,8 @@ from operator import index
 
 from operator import index
 
-from isp_core import *
-from isp_util import *
+from isp.isp_core import *
+from isp.isp_util import *
 import time
 
 

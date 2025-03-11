@@ -19,6 +19,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes, ae
 
 from utils.common import global_defines
 from utils.common.exceptions import RsaKeyLoadingError
+from utils import paths
 
 
 class RsaCrypto:
@@ -84,6 +85,12 @@ class RsaCrypto:
 
         Raises RsaKeyLoadingError in case of failure.
         """
+        utils_dir = paths.TOOLKIT_DIR / "utils"
+        pem_filename = (utils_dir / pem_filename).as_posix()
+        if keypair_passphrase_filename is not None:
+            keypair_passphrase_filename = (
+                utils_dir / keypair_passphrase_filename
+            ).as_posix()
         # opening PEM file
         try:
             with open(pem_filename) as key_file:

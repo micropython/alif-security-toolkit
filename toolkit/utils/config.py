@@ -1,3 +1,4 @@
+import os
 import sys
 import json
 from json.decoder import JSONDecodeError
@@ -7,10 +8,11 @@ from json.decoder import JSONDecodeError
 TOOL_VERSION = "0.07.000"
 
 # DB files
-CONFIG_FILE = "utils/global-cfg.db"
-DEVICE_DB_FILE = "utils/devicesDB.db"
-FEATURES_DB_FILE = "utils/featuresDB.db"
-HASHES_DB_FILE = "utils/hashesDB.db"
+config_file_dir = os.path.dirname(__file__)
+CONFIG_FILE = os.path.join(config_file_dir, "global-cfg.db")
+DEVICE_DB_FILE = os.path.join(config_file_dir, "devicesDB.db")
+FEATURES_DB_FILE = os.path.join(config_file_dir, "featuresDB.db")
+HASHES_DB_FILE = os.path.join(config_file_dir, "hashesDB.db")
 
 
 EXIT_WITH_ERROR = 1

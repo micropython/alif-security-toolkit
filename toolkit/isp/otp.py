@@ -6,7 +6,7 @@ __author__ onyettr
 """
 
 # pylint: disable=unused-argument, invalid-name
-from isp_print import isp_print_color
+from isp.isp_print import isp_print_color
 
 
 def display_otp_info(word_offset, response):

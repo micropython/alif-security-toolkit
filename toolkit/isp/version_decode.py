@@ -8,11 +8,12 @@ __author__ onyettr
 
 # pylint: disable=unused-argument, invalid-name
 import struct
-from isp_print import isp_print_color
-from isp_print import isp_print_response
-from otp_mfgr_decode import decode_otp_manufacture
-from otp_check import check_otp_integrity
-from trim_decode import trim_decoder
+
+from isp.isp_print import isp_print_color
+from isp.isp_print import isp_print_response
+from isp.otp_mfgr_decode import decode_otp_manufacture
+from isp.otp_check import check_otp_integrity
+from isp.trim_decode import trim_decoder
 
 # Wounding bits
 OTP_WOUNDING_ALIF_DFT = 1 << 0

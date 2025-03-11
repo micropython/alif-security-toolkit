@@ -21,7 +21,7 @@ __author__ onyettr
 import struct
 
 try:
-    from isp_print import isp_print_color
+    from isp.isp_print import isp_print_color
 except ImportError:
 
     def isp_print_color(color, msg):  # fallback when running standalone

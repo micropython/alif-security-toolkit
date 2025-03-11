@@ -19,26 +19,32 @@ import argparse
 
 # Import local SETOOLS support
 import utils.config
-from utils.config import *  # pylint: disable=wildcard-import,unused-wildcard-import
+from utils.config import (
+    ALIF_EAGLE_OSPI_PACKAGE_SIZE,
+    getOspiMemTypeFromAddress,
+    getPartDescription,
+    load_global_config,
+)
 from utils.user_validations import validateArgList
-
-sys.path.append("./isp")
-# pylint: disable=wrong-import-position,wrong-import-order,import-error
-from serialport import serialPort
-from serialport import COM_BAUD_RATE_MAXIMUM
-from isp_core import isp_start, isp_stop, isp_reset
-from isp_core import isp_set_baud_rate
-from isp_core import isp_show_maintenance_mode
-from isp_core import isp_get_maintenance_status
-from isp_core import isp_mram_erase
-from isp_core import CtrlCHandler
-from isp_util import burn_mram_isp
-from isp_util import put_target_in_maintenance_mode
-
-# from isp_protocol import ERASE_SECTOR_SIZE_4K, ERASE_SECTOR_SIZE_32K, ERASE_SECTOR_SIZE_128K
-from isp_util import *
-import device_probe
 from utils.ospi_mem_handler import OSPIMemoryHandler
+from isp.serialport import serialPort
+from isp.serialport import COM_BAUD_RATE_MAXIMUM
+from isp.isp_core import (
+    CtrlCHandler,
+    isp_get_maintenance_status,
+    isp_mram_erase,
+    isp_reset,
+    isp_set_baud_rate,
+    isp_show_maintenance_mode,
+    isp_start,
+    isp_stop,
+)
+from isp.isp_util import (
+    burn_mram_isp,
+    close_isp_and_exit,
+    put_target_in_maintenance_mode,
+)
+from isp import device_probe
 
 #  Version                  Feature
 # 0.26.000     Added support for OSPI external memory
@@ -345,12 +351,15 @@ def main():
                 sys.exit(EXIT_WITH_ERROR)
             arg_list += args.erase
 
-    elif args.images != "Application TOC Package":
-        arg_list = args.images
+    elif args.images == "Application TOC Package" or args.images.startswith("file:"):
+        if args.images.startswith("file:"):
+            dsFile = args.images.removeprefix("file:")
+        else:
+            dsFile = "bin/application_package.ds"
+        arg_list = read_image_list(dsFile)
 
     else:
-        dsFile = "bin/application_package.ds"
-        arg_list = read_image_list(dsFile)
+        arg_list = args.images
 
     if args.skip:
         idx = arg_list.find("../build/AppTocPackage.bin 0x")

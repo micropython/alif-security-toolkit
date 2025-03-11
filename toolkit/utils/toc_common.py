@@ -1,17 +1,14 @@
 import sys
 import os
 import glob
-from pathlib import Path
 import json
 from json.decoder import JSONDecodeError
 from utils import cert_sb_content_util
 import utils.toc_common
-from printInfo import *
+from utils.printInfo import *
+from utils import paths
 
 EXIT_WITH_ERROR = 1
-
-certPath = Path("cert/")
-imagePath = Path("build/images/")
 
 
 # we need to pad 12 bytes to put the image into a 16-byte aligned address
@@ -399,7 +396,7 @@ def addContentCertificate(file, binary):
     addContentCertificate
     """
     certFile = "SB" + binary + ".crt"
-    certFile = certPath / certFile
+    certFile = paths.OUTPUT_DIR / certFile
     # print("Copying Cont.Cert: " + str(certFile))
     file.write(getBlob(certFile))
     # pad 12 bytes to put the image in a 16-byte aligned address
@@ -410,6 +407,8 @@ def createContentCerts(fwsections, prefix):
     """
     create content certificates
     """
+    certPath = imagePath = paths.OUTPUT_DIR
+
     print("Creating Content Certificates...")
     for sec in fwsections:
         if sec["disabled"] is True:
@@ -469,8 +468,7 @@ def createContentCerts(fwsections, prefix):
         # print("../build/" + sec['binary'] + " " + str(mem_load_address) + " " + \
         #            str(sec['mramAddress']) + " " + str(fsize) + " " + encrypt)
         file.write(
-            "../build/images/"
-            + sec["binary"]
+            sec["binary"]
             + " "
             + str(mem_load_address)
             + " "
@@ -482,15 +480,18 @@ def createContentCerts(fwsections, prefix):
         )
         file.close()
 
-        os.chdir(os.getcwd() + "/utils/")
-        cert_sb_content_util.main(
-            ["-c", "cfg/" + configFile, "-l", "../build/logs/SBContent.log"]
-        )
-        os.chdir(os.getcwd() + "/../")
+        cfg_file = paths.TOOLKIT_DIR / "utils" / "cfg" / configFile
+        cert_sb_content_util.main(["-c", cfg_file, "-l", certPath / "SBContent.log"])
 
         # check if file exists (and remove it) before renaming it
         # certFile = "SB" + sec['binary'] + ".crt"
-        certFile = "SB" + sec["binary"] + "_" + str(sec["mramAddress"]) + ".crt"
+        certFile = (
+            "SB"
+            + os.path.basename(sec["binary"])
+            + "_"
+            + str(sec["mramAddress"])
+            + ".crt"
+        )
         printInfo(certFile)
         if os.path.exists(certPath / certFile):
             os.remove(certPath / certFile)
