@@ -26,27 +26,18 @@ import configparser
 import sys
 import os
 
-file_path = os.getcwd()
-sys.path.insert(0, os.path.join(file_path, "utils"))
-sys.path.append(os.path.join(file_path, "..", ".."))
-
-from common import util_logger
-from common import global_defines
-from common import certificates
+from utils.common import util_logger
+from utils.common import global_defines
+from utils.common import certificates
 from utils.common_cert_lib.contentcertificateconfig import ContentCertificateConfig
-
-from printInfo import *
+from utils.printInfo import *
+from utils import paths
 
 # Util's log file
 LOG_FILENAME = "sb_content_cert.log"
 
 # find proj.cfg
-if "proj.cfg" in os.listdir(sys.path[0]):
-    PROJ_CONFIG_PATH = os.path.join(sys.path[0], "proj.cfg")
-elif "proj.cfg" in os.listdir(sys.path[-1]):
-    PROJ_CONFIG_PATH = os.path.join(sys.path[-1], "proj.cfg")
-else:
-    PROJ_CONFIG_PATH = os.path.join(os.getcwd(), "proj.cfg")
+PROJ_CONFIG_FILE = "proj.cfg"
 
 
 class ArgumentParser:
@@ -82,14 +73,19 @@ class ContentCertificateGenerator:
         )
         serialized_cert_data = self._certificate.certificate_data
 
-        with open(self.config.cert_pkg, "wb") as bin_output_file:
+        # Compute correct path.
+        cert_pkg_file = self.config.cert_pkg
+        assert cert_pkg_file.startswith("../cert/")
+        cert_pkg_file = (paths.OUTPUT_DIR / cert_pkg_file.split("/", 2)[2]).as_posix()
+
+        with open(cert_pkg_file, "wb") as bin_output_file:
             bin_output_file.write(serialized_cert_data)
 
         hex_formatted_cert = [
             "0x%02x" % i for i in list(self._certificate.certificate_data)
         ]
         txt_filename = (
-            self.config.cert_pkg[:-4]
+            cert_pkg_file[:-4]
             + "_"
             + global_defines.Cert_FileName
             + global_defines.Cert_FileExtTxt
@@ -119,7 +115,8 @@ def main(args):
     )
     # Get the project configuration values
     project_config = configparser.ConfigParser()
-    with open(PROJ_CONFIG_PATH, "r") as project_config_file:
+    proj_config_path = paths.TOOLKIT_DIR / "utils" / PROJ_CONFIG_FILE
+    with open(proj_config_path, "r") as project_config_file:
         config_string = "[PROJ-CFG]\n" + project_config_file.read()
     project_config.read_string(config_string)
     cert_version = [

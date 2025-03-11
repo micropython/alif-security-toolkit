@@ -29,10 +29,6 @@ import configparser
 import sys
 import os
 
-file_path = os.getcwd()
-sys.path.insert(0, os.path.join(file_path, "utils"))
-sys.path.append(os.path.join(sys.path[0], "..", ".."))
-
 from utils.common import util_logger
 from utils.common import global_defines
 from utils.common import certificates

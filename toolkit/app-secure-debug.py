@@ -14,7 +14,6 @@ import sys
 import signal
 import argparse
 
-sys.path.append("./isp")
 import subprocess
 from serialport import serialPort
 import utils.config

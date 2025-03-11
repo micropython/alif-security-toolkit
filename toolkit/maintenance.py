@@ -16,7 +16,6 @@ import os
 import sys
 import argparse
 
-sys.path.append("./isp")
 from serialport import serialPort  # ISP Serial support
 from serialport import COM_TIMEOUT_RX_DEFAULT
 from isp_protocol import *  # ISP protocol constants

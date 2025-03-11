@@ -18,7 +18,6 @@ TODO:
 # pylint: disable=unused-argument, invalid-name, bare-except
 import sys
 
-sys.path.append("./isp")
 from isp_protocol import *
 from isp_core import *
 from isp_util import *

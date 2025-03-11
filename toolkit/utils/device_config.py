@@ -7,7 +7,8 @@ from utils.config import read_global_config
 import utils.firewall
 from utils.firewall import firewall_json_to_bin
 import utils.pinmux
-from printInfo import *
+from utils.printInfo import *
+from utils import paths
 
 EXIT_WITH_ERROR = 1
 
@@ -205,7 +206,7 @@ def processPinMux(configuration):
 
 def processFirewall(configuration, is_icv):
     printInfo("Process Firewall")
-    utils.firewall.OUTPUT_FILE = "build/images/fw_temp.bin"
+    utils.firewall.OUTPUT_FILE = paths.OUTPUT_DIR / "fw_temp.bin"
     firewall_json_to_bin(configuration, is_icv)
 
 
@@ -238,10 +239,10 @@ def processMiscellaneous(configuration):
 
 
 def gen_device_config(file, is_icv):
-    cfg = read_global_config("build/config/" + file)
+    file = paths.CONFIG_INPUT_DIR / file
+    cfg = read_global_config(file)
     validateSections(cfg, file)  # request from SE-1938
-    binFile = file[:-5] + ".bin"
-    f = createBinary("build/images/" + binFile)
+    f = createBinary((paths.OUTPUT_DIR / os.path.basename(file)).with_suffix(".bin"))
     for sec in cfg:
         printInfo("Create area for: " + sec)
 

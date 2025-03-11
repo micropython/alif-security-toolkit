@@ -10,7 +10,7 @@ __author__ onyettr
 
 # pylint: disable=unused-argument, invalid-name, consider-using-f-string
 import struct
-from isp_print import isp_print_color
+from isp.isp_print import isp_print_color
 
 SRAM0_SIZE_lut = {0: "4.0", 1: "2.0"}
 

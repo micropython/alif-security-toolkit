@@ -12,7 +12,6 @@ import os
 import sys
 import argparse
 
-sys.path.append("./isp")
 from serialport import serialPort
 from serialport import COM_BAUD_RATE_MAXIMUM
 

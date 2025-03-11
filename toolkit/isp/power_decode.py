@@ -7,7 +7,7 @@ __author__ onyettr
 
 # pylint: disable=unused-argument, invalid-name, consider-using-f-string
 import struct
-from isp_print import isp_print_color
+from isp.isp_print import isp_print_color
 
 # PCSMPSTATE [3:0]
 PCSMP_STATE_WARM_RESET = 0x8

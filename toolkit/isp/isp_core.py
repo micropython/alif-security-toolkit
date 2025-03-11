@@ -14,22 +14,26 @@ import signal
 import time
 import sys
 import struct
-from isp_protocol import *
-from isp_print import isp_print_color, isp_print_response, isp_print_message
-from serom_errors import *
-from toc_decode import display_toc_info, toc_decode_toc_info
-from toc_decode import TOC_IMAGE_CPU_A32_0, TOC_IMAGE_CPU_A32_1
-from toc_decode import TOC_IMAGE_CPU_M55_HP, TOC_IMAGE_CPU_M55_HE, TOC_IMAGE_CPU_MODEM
-from toc_decode import TOC_IMAGE_CPU_GNSS, TOC_IMAGE_CPU_DSP
-from version_decode import version_decode
-from cpu_decode import display_cpu_info
-from power_decode import display_power_info
-from clock_decode import display_clock_info
-from otp import display_otp_info
+from isp.isp_protocol import *
+from isp.isp_print import isp_print_color, isp_print_response, isp_print_message
+from isp.serom_errors import *
+from isp.toc_decode import display_toc_info, toc_decode_toc_info
+from isp.toc_decode import TOC_IMAGE_CPU_A32_0, TOC_IMAGE_CPU_A32_1
+from isp.toc_decode import (
+    TOC_IMAGE_CPU_M55_HE,
+    TOC_IMAGE_CPU_M55_HP,
+    TOC_IMAGE_CPU_MODEM,
+)
+from isp.toc_decode import TOC_IMAGE_CPU_GNSS, TOC_IMAGE_CPU_DSP
+from isp.version_decode import version_decode
+from isp.cpu_decode import display_cpu_info
+from isp.power_decode import display_power_info
+from isp.clock_decode import display_clock_info
+from isp.otp import display_otp_info
 # from serom_trace import *
 
 # from seram_trace import trace_buffer_decode
-from trace_decode import trace_buffer_decode
+from isp.trace_decode import trace_buffer_decode
 
 EXIT_WITH_ERROR = 1
 
