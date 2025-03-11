@@ -630,7 +630,9 @@ def updateDeviceConfig(file):
                 unwanted_item = True
         if unwanted_item:
             print(
-                "[ERROR] File '" + file + "' should not contain 'miscellaneous' entry"
+                "[ERROR] File '"
+                + file.as_posix()
+                + "' should not contain 'miscellaneous' entry"
             )
             sys.exit(EXIT_WITH_ERROR)
     # Don't write out the json file, because it didn't change.
