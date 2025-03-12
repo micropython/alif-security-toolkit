@@ -196,6 +196,9 @@ def parse_arguments():
         help="COM port discovery",
     )
     parser.add_argument(
+        "--port", type=str, help="Serial port device", default="/dev/ttyACM0"
+    )
+    parser.add_argument(
         "-e",
         "--erase",
         type=str,
@@ -367,6 +370,7 @@ def main():
         print("Discover")
         isp.discoverSerialPorts()
 
+    isp.setPort(args.port)
     errorCode = isp.openSerial()
     if errorCode is False:
         print(f"[ERROR] isp openSerial failed for {isp.getPort()}")

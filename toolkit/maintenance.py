@@ -1054,6 +1054,9 @@ def main():
 
     # Deal with Command Line
     parser = argparse.ArgumentParser(description="SETOOLS Maintenance Tool")
+    parser.add_argument(
+        "--port", type=str, help="Serial port device", default="/dev/ttyACM0"
+    )
     parser.add_argument("-b", "--baudrate", help="serial port baud rate", type=int)
     parser.add_argument(
         "-c", "--comport", type=str, default="COM3", help="Specify COM port"
@@ -1121,6 +1124,7 @@ def main():
         print("Discover")
         isp.discoverSerialPorts()
 
+    isp.setPort(args.port)
     errorCode = isp.openSerial()
     if errorCode is False:
         print(f"[ERROR] isp openSerial failed for {isp.getPort()}")
