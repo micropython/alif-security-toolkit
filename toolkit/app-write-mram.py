@@ -139,7 +139,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="NVM Burner for Application TOC Package"
     )
-    parser.add_argument("-d", "--device", type=str, help="serial port device")
+    parser.add_argument(
+        "--port", type=str, help="Serial port device", default="/dev/ttyACM0"
+    )
     parser.add_argument("-b", "--baudrate", help="serial port baud rate", type=int)
     parser.add_argument(
         "-e",
@@ -366,7 +368,7 @@ def main():
         isp.discoverSerialPorts()
     """
 
-    errorCode = isp.openSerial(args.device)
+    errorCode = isp.openSerial(args.port)
     if errorCode is False:
         print("[ERROR] isp openSerial failed for %s" % isp.getPort())
         sys.exit(EXIT_WITH_ERROR)

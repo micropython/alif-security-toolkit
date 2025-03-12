@@ -84,6 +84,9 @@ def main():
         help="COM port discovery for ISP",
     )
     parser.add_argument(
+        "--port", type=str, help="Serial port device", default="/dev/ttyACM0"
+    )
+    parser.add_argument(
         "-b", "--baudrate", help="(isp) serial port baud rate", type=int
     )
     parser.add_argument(
@@ -147,7 +150,7 @@ def main():
     if args.discover:  # discover the COM ports if requested
         isp.discoverSerialPorts()
 
-    errorCode = isp.openSerial()
+    errorCode = isp.openSerial(args.port)
     if errorCode is False:
         print("[ERROR] isp openSerial failed for %s" % isp.getPort())
         sys.exit(EXIT_WITH_ERROR)
