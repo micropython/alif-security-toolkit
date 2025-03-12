@@ -16,21 +16,22 @@ import os
 import sys
 import argparse
 
-from serialport import serialPort  # ISP Serial support
-from serialport import COM_TIMEOUT_RX_DEFAULT
-from isp_protocol import *  # ISP protocol constants
-from isp_core import *
-from isp_util import *
-from isp_print import *
-import device_probe
+from isp.serialport import serialPort  # ISP Serial support
+from isp.serialport import COM_TIMEOUT_RX_DEFAULT
+from isp.isp_protocol import *  # ISP protocol constants
+from isp.isp_core import *
+from isp.isp_util import *
+from isp.isp_print import *
+from isp import device_probe
 
 # from isp_print import isp_print_color, isp_print_cursor_enable
 # from isp_print import isp_print_cursor_disable,isp_print_terminal_reset
-from toc_decode import *  # ISP TOC support
-from power_decode import *  # ISP POWER support
+from isp.toc_decode import *  # ISP TOC support
+from isp.power_decode import *  # ISP POWER support
 from utils.config import *
 from utils.user_validations import validateArgList
-from recovery import recovery_action, recovery_action_no_reset
+from isp.recovery import recovery_action, recovery_action_no_reset
+import utils
 
 
 # Define Version constant for each separate tool

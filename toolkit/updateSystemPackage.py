@@ -12,13 +12,13 @@ import os
 import sys
 import argparse
 
-from serialport import serialPort
-from serialport import COM_BAUD_RATE_MAXIMUM
+from isp.serialport import serialPort
+from isp.serialport import COM_BAUD_RATE_MAXIMUM
 
 # import ispcommands
-from isp_core import *
-from isp_util import *
-import device_probe
+from isp.isp_core import *
+from isp.isp_util import *
+from isp import device_probe
 import utils.config
 from utils.config import *
 
