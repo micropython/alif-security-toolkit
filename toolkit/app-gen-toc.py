@@ -687,7 +687,7 @@ def main():
     parser.add_argument(
         "--config-dir",
         type=str,
-        default=Path(os.path.dirname(__file__)) / "build/config",
+        default=None,
         help="directory with configuration files",
     )
     parser.add_argument(
@@ -706,11 +706,7 @@ def main():
     args = parser.parse_args()
 
     # Set paths given on command line.
-    paths.TOOLKIT_DIR = Path(os.path.dirname(__file__))
-    paths.CERT_INPUT_DIR = paths.TOOLKIT_DIR / "cert"
-    paths.CONFIG_INPUT_DIR = Path(args.config_dir)
-    paths.FIRMWARE_INPUT_DIR = Path(args.firmware_dir)
-    paths.OUTPUT_DIR = Path(args.output_dir)
+    paths.configure(args.config_dir, args.firmware_dir, args.output_dir)
 
     if args.version:
         print(TOOL_VERSION)

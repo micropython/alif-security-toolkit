@@ -2,6 +2,7 @@ import os
 import sys
 import json
 from json.decoder import JSONDecodeError
+from utils import paths
 
 # Define Version constant for each separate tool
 # 0.06.000 added package and offset params
@@ -9,7 +10,7 @@ TOOL_VERSION = "0.07.000"
 
 # DB files
 config_file_dir = os.path.dirname(__file__)
-CONFIG_FILE = os.path.join(config_file_dir, "global-cfg.db")
+CONFIG_FILE = "global-cfg.db"
 DEVICE_DB_FILE = os.path.join(config_file_dir, "devicesDB.db")
 FEATURES_DB_FILE = os.path.join(config_file_dir, "featuresDB.db")
 HASHES_DB_FILE = os.path.join(config_file_dir, "hashesDB.db")
@@ -80,10 +81,10 @@ def read_global_config(file):
 
 
 def save_global_config(devDescription, devRevision):
-    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+    with open(paths.CONFIG_INPUT_DIR / CONFIG_FILE, "r", encoding="utf-8") as f:
         cfg = json.load(f)
 
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+    with open(paths.CONFIG_INPUT_DIR / CONFIG_FILE, "w", encoding="utf-8") as f:
         cfg["DEVICE"]["Part#"] = devDescription
         cfg["DEVICE"]["Revision"] = devRevision
         json.dump(cfg, f, ensure_ascii=False, indent=4)
@@ -184,7 +185,7 @@ def load_global_config():
     global JTAG_ADAPTER
     global HASHES_DB
 
-    cfg = read_global_config(CONFIG_FILE)
+    cfg = read_global_config(paths.CONFIG_INPUT_DIR / CONFIG_FILE)
 
     # validate configuration parameters
     # check parameter is configured...

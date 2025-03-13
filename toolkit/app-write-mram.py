@@ -23,6 +23,7 @@ from utils.user_validations import validateArgList
 from isp.serialport import serialPort
 from isp.serialport import COM_BAUD_RATE_MAXIMUM
 from utils.toc_common import globalToLocalAddress
+from utils import paths
 
 # import ispcommands
 from isp.isp_core import (
@@ -195,8 +196,18 @@ def main():
         "-V", "--version", help="Display Version Number", action="store_true"
     )
     parser.add_argument("-v", "--verbose", help="verbosity mode", action="store_true")
+    parser.add_argument(
+        "--config-dir",
+        type=str,
+        default=None,
+        help="directory with configuration files",
+    )
 
     args = parser.parse_args()
+
+    # Set paths given on command line.
+    paths.configure(args.config_dir)
+
     if args.version:
         print(TOOL_VERSION)
         sys.exit()
