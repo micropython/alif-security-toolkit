@@ -177,12 +177,21 @@ def load_device_config(devDescription, devRevision):
     APP_MRAM_SIZE = app_size
 
 
-def load_global_config():
+def load_global_config(part_num=None, part_rev=None, jtag_iface=None, mram_iface=None):
     global DEVICE_PART_NUMBER
     global DEVICE_REVISION
     global MRAM_BURN_INTERFACE
     global JTAG_ADAPTER
     global HASHES_DB
+
+    if part_num is not None:
+        DEVICE_PART_NUMBER = getPartDescription(part_num)
+        DEVICE_REVISION = part_rev
+        JTAG_ADAPTER = jtag_iface
+        MRAM_BURN_INTERFACE = mram_iface
+        HASHES_DB = read_global_config(HASHES_DB_FILE)
+        load_device_config(DEVICE_PART_NUMBER, DEVICE_REVISION)
+        return
 
     cfg = read_global_config(CONFIG_FILE)
 

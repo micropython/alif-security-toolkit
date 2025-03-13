@@ -114,6 +114,10 @@ def main():
     parser.add_argument(
         "-V", "--version", help="Display Version Number", action="store_true"
     )
+    parser.add_argument("--cfg-part", type=str, help="Part Number")
+    parser.add_argument("--cfg-rev", type=str, help="Part Revision", default="B4")
+    parser.add_argument("--cfg-jtag", type=str, help="JTAG Interface", default="J-Link")
+    parser.add_argument("--cfg-mram", type=str, help="MRAM Interface", default="isp")
     parser.add_argument("-v", "--verbose", help="verbosity mode", action="store_true")
     args = parser.parse_args()
 
@@ -125,7 +129,7 @@ def main():
         sys.exit()
 
     # retrieve initial params based on user selection (toold-config)
-    load_global_config()
+    load_global_config(args.cfg_part, args.cfg_rev, args.cfg_jtag, args.cfg_mram)
     DEVICE_PART_NUMBER = utils.config.DEVICE_PART_NUMBER
     DEVICE_REVISION = utils.config.DEVICE_REVISION
     DEVICE_REV_BAUD_RATE = utils.config.DEVICE_REV_BAUD_RATE
