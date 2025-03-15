@@ -369,14 +369,11 @@ def main():
         arg_list = args.images
 
     if args.skip:
-        idx = arg_list.find("../build/AppTocPackage.bin 0x")
-        arg_list = arg_list[idx : idx + 37]
+        idx = arg_list.find("build/AppTocPackage.bin 0x")
+        arg_list = arg_list[idx : idx + 35]
 
     # validate all parameters
     arg_list = validateArgList(action, arg_list.strip(), args.pad)
-
-    if sys.platform in ["linux", "darwin"]:
-        arg_list = arg_list.replace("../", "")
 
     print("[INFO]", action + arg_list)
 
@@ -506,7 +503,6 @@ def main():
             addr = items[e]
             address = int(addr, base=16)
             fileName = items[e - 1]
-            fileName = fileName.replace("..\\", "")
 
             print("OSPI address verification...")
             if getOspiMemTypeFromAddress(address & 0xF0000000) != "INVALID":
