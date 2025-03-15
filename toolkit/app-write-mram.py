@@ -291,14 +291,11 @@ def main():
         argList = args.images
 
     if args.skip:
-        idx = argList.find("../build/AppTocPackage.bin 0x")
-        argList = argList[idx : idx + 37]
+        idx = argList.find("build/AppTocPackage.bin 0x")
+        argList = argList[idx : idx + 35]
 
     # validate all parameters
     argList = validateArgList(action, argList.strip(), args.pad)
-
-    if sys.platform == "linux" or sys.platform == "darwin":
-        argList = argList.replace("../", "")
 
     print("[INFO]", action + argList)
 
@@ -438,7 +435,6 @@ def main():
             addr = items[e]
             address = int(addr, base=16)
             fileName = items[e - 1]
-            fileName = fileName.replace("..\\", "")
 
             if (
                 burn_mram_isp(
