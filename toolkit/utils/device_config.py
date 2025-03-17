@@ -239,7 +239,6 @@ def processMiscellaneous(configuration):
 
 
 def gen_device_config(file, is_icv):
-    file = paths.CONFIG_INPUT_DIR / file
     cfg = read_global_config(file)
     validateSections(cfg, file)  # request from SE-1938
     f = createBinary((paths.OUTPUT_DIR / os.path.basename(file)).with_suffix(".bin"))
