@@ -623,7 +623,6 @@ def validateVersAttr(version):
 
 
 def updateDeviceConfig(file):
-    file = paths.CONFIG_INPUT_DIR / file
     # print('*** updateDeviceConfig: ', file)
     # Update the firewall configuration in the OEM DEVICE config file
     # This doesn't do anything except format the json file.
@@ -693,10 +692,9 @@ def main():
     )
     parser.add_argument("-v", "--verbose", help="verbosity mode", action="store_true")
     parser.add_argument(
-        "--config-dir",
+        "--cfg-binary",
         type=str,
-        default=Path(os.path.dirname(__file__)) / "build/config",
-        help="directory with configuration files",
+        help="application device configuration file to use (overrides json 'binary' value)",
     )
     parser.add_argument(
         "--output-dir",
@@ -720,7 +718,6 @@ def main():
     # Set paths given on command line.
     paths.TOOLKIT_DIR = Path(os.path.dirname(__file__))
     paths.CERT_INPUT_DIR = paths.TOOLKIT_DIR / "cert"
-    paths.CONFIG_INPUT_DIR = Path(args.config_dir)
     paths.FIRMWARE_INPUT_DIR = Path(args.firmware_dir)
     paths.OUTPUT_DIR = Path(args.output_dir)
 
@@ -782,12 +779,22 @@ def main():
             sec["binary"] = (paths.FIRMWARE_INPUT_DIR / sec["binary"]).as_posix()
             continue
 
-        print("Generating Device Configuration for: " + sec["binary"])
-        updateDeviceConfig(sec["binary"])
-        gen_device_config(sec["binary"], False)
-        sec["binary"] = (
-            (paths.OUTPUT_DIR / sec["binary"]).with_suffix(".bin").as_posix()
-        )
+        # get app-device-config.json filename: either specified on command-line, or from config
+        if args.cfg_binary is not None:
+            input_device_config = args.cfg_binary
+        else:
+            input_device_config = sec["binary"]
+            if not os.path.isabs(input_device_config):
+                input_device_config = (
+                    paths.TOOLKIT_DIR / "build/config" / input_device_config
+                )
+
+        binary = os.path.basename(input_device_config)
+
+        print("Generating Device Configuration for: " + binary)
+        updateDeviceConfig(input_device_config)
+        gen_device_config(input_device_config, False)
+        sec["binary"] = (paths.OUTPUT_DIR / binary).with_suffix(".bin").as_posix()
 
     #     also check unmanaged images (mramAddress != 0) are between boundaries (OEM_BASE_ADDRESS - only in Rev_A as in Rev_B will be 0)
     #     and images don't overlap... Also, advice is GAPs (big ones) exist - especially if tool can't create the layout...
