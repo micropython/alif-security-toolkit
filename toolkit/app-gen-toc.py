@@ -21,9 +21,8 @@ import struct
 import argparse
 from pathlib import Path
 import zlib
-import json
 import utils
-from utils.config import load_global_config, read_global_config
+from utils.config import load_global_config
 from utils.device_config import gen_device_config
 from utils.sign_image_util import sign_image
 from utils.printInfo import printInfo, verboseModeSet
@@ -615,31 +614,6 @@ def validateVersAttr(version):
         sys.exit(EXIT_WITH_ERROR)
 
 
-def updateDeviceConfig(file):
-    # print('*** updateDeviceConfig: ', file)
-    # Update the firewall configuration in the OEM DEVICE config file
-    # This doesn't do anything except format the json file.
-    # update_fw_cfg_oem(file)
-
-    cfg = read_global_config(file)
-    if "miscellaneous" in cfg:
-        unwanted_item = False
-        for item in cfg["miscellaneous"]:
-            if "sdesc" in item or "ldesc" in item or "options" in item:
-                unwanted_item = True
-        if unwanted_item:
-            print(
-                "[ERROR] File '"
-                + file.as_posix()
-                + "' should not contain 'miscellaneous' entry"
-            )
-            sys.exit(EXIT_WITH_ERROR)
-    # Don't write out the json file, because it didn't change.
-    return
-    with open("build/config/" + file, "w") as json_file:
-        json.dump(cfg, json_file, indent=2)
-
-
 def main():
     cwd_path = os.getcwd()
     os.chdir(cwd_path)
@@ -779,7 +753,6 @@ def main():
         binary = os.path.basename(input_device_config)
 
         print("Generating Device Configuration for: " + binary)
-        updateDeviceConfig(input_device_config)
         gen_device_config(input_device_config, False)
         sec["binary"] = (paths.OUTPUT_DIR / binary).with_suffix(".bin").as_posix()
 
