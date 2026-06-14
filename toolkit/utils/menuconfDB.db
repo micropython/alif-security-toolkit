@@ -8,6 +8,14 @@
         "DEVICE_FEATURE_SET_REVISION": [
              "Fusion_A1"
         ]
+    },
+    "write_altboot_otp_action" : {
+        "DEVICE_FEATURE_SET_REVISION": [
+             "Spark_A0",
+             "Spark_A5",
+             "Fusion_B3",
+             "Fusion_B4"
+        ]
     }
 
 }

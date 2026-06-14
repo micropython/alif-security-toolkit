@@ -60,7 +60,7 @@ def main():
 
     argList = args.images
 
-    if sys.platform == "linux":
+    if sys.platform in ["linux", "darwin"]:
         argList = argList.replace("\\", "/")
     else:
         argList = argList.replace("/", "\\")

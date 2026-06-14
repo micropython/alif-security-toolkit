@@ -22,6 +22,7 @@ from isp_util import *
 import device_probe
 import utils.config
 from utils.config import *
+from utils.ospi_mem_handler import OSPIMemoryHandler
 
 # Define Version constant for each separate tool
 #  Version                  Feature
@@ -36,7 +37,9 @@ from utils.config import *
 # 0.24.000     get baudrate from DBs
 # 0.25.000     Added Part# and Revision Device's detection and offer to switch as defaults
 # 0.26.000     Added support for MAC OS
-TOOL_VERSION = "0.26.000"
+# 0.26.001     Moved default parts and env checks to isp/device_probe.py
+# 0.27.000     Added support for OSPI external memory
+TOOL_VERSION = "0.27.000"
 
 EXIT_WITH_ERROR = 1
 
@@ -76,7 +79,9 @@ def main():
         print("[ERROR] You need Python 3 for this application!")
         sys.exit(EXIT_WITH_ERROR)
 
-    parser = argparse.ArgumentParser(description="Update System Package in MRAM")
+    parser = argparse.ArgumentParser(
+        description="Update System Package in MRAM/ext OSPI"
+    )
     parser.add_argument(
         "-d",
         "--discover",
@@ -92,6 +97,12 @@ def main():
         "--switch",
         help="(isp) dynamic baud rate switch toggle, default=on",
         action="store_false",
+    )
+    parser.add_argument(
+        "-m",
+        "--memory",
+        action="store_true",
+        help="update SERAM in external OSPI memory",
     )
     parser.add_argument(
         "-nr",
@@ -172,21 +183,6 @@ def main():
     print("[INFO] Detected Device:")
     partDetected = device.part_number
 
-    # Check for Blank devices
-    # These should not exist! but initial devices for bring up are always Blank
-    if (
-        bytes(partDetected, "utf-8")
-        == b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-    ):
-        if device.revision == "A0":  # SPARK Device default
-            partDetected = "AB1C1F4M51820PH"
-        elif device.revision == "EG":  # Eagle A0
-            partDetected = "AE722F80F55D5EG"
-            device.revision = "A0"
-        else:  # ENSEMBLE Device default
-            partDetected = "AE722F80F55D5LS"
-        print("[WARN] No Part# was detected! Defaulting to " + partDetected)
-
     print("Part# " + partDetected + " - Rev: " + device.revision)
 
     partDescription = getPartDescription(partDetected)
@@ -198,29 +194,65 @@ def main():
     DEVICE_PACKAGE = utils.config.DEVICE_PACKAGE
     DEVICE_REV_PACKAGE_EXT = utils.config.DEVICE_REV_PACKAGE_EXT
     DEVICE_OFFSET = utils.config.DEVICE_OFFSET
-    MRAM_BASE_ADDRESS = utils.config.MRAM_BASE_ADDRESS
-    ALIF_BASE_ADDRESS = utils.config.ALIF_BASE_ADDRESS
-    MRAM_SIZE = utils.config.MRAM_SIZE
 
-    print("- MRAM Base Address: " + hex(ALIF_BASE_ADDRESS))
+    # check if SERAM update for external OSPI was requested
+    if args.memory:
+        print("[INFO] SERAM in external OSPI was requested")
+        # check if device supports OSPI and if it's enabled in OTP
+        if device.supports_ospi:
+            print("[INFO] Device supports OSPI external memory")
+            if device.is_ospi_enabled(isp):
+                print("[INFO] OSPI is enabled in OTP")
+            else:
+                print("[INFO] OSPI is NOT enabled in OTP")
+                close_isp_and_exit(isp, "[ERROR] OSPI is not enabled in OTP")
+        else:
+            close_isp_and_exit(
+                isp,
+                "[ERROR] OSPI Recovery mode requested, but device does not support OSPI memory",
+            )
+
+        # retrieve OSPI parameters
+        MEM_BASE_ADDRESS, MEM_SIZE, ALIF_BASE_ADDRESS, EXT_MEMORY_TYPE = (
+            device.get_ospi_params()
+        )
+
+    else:
+        # set MRAM params
+        print("[INFO] SERAM in MRAM memory")
+        MEM_BASE_ADDRESS = utils.config.MRAM_BASE_ADDRESS
+        ALIF_BASE_ADDRESS = utils.config.ALIF_BASE_ADDRESS
+        MEM_SIZE = utils.config.MRAM_SIZE
+
+    print(
+        f"ALIF_BASE_ADDRESS {hex(ALIF_BASE_ADDRESS)} alif_offset {hex(MEM_BASE_ADDRESS + MEM_SIZE - 16)}"
+    )
 
     # check the default Part#/Rev in tools-config and offer to switch
     checkTargetWithSelection(partDescription, device.revision)
 
     env_ext = ""
-    if device.env.lower() in HASHES_DB:
-        if HASHES_DB[device.env] == "DEV":
-            env_ext = "-dev"
-
-    # for devices in CM LCS, we use the DEV package
-    if device.env == "00000000000000000000000000000000":
-        print("[WARN] Device is not provisioned!")
+    if device.env == "DEV":
         env_ext = "-dev"
 
     rev_ext = DEVICE_REV_PACKAGE_EXT[device.revision]
 
-    alif_image = "alif/" + DEVICE_PACKAGE + "-" + rev_ext + env_ext + ".bin"
-    alif_offset = "alif/" + DEVICE_OFFSET + "-" + rev_ext + env_ext + ".bin"
+    packageName = DEVICE_PACKAGE
+    offsetName = DEVICE_OFFSET
+    # add suffix for external memory
+    if args.memory:
+        memType = getOspiMemTypeFromAddress(MEM_BASE_ADDRESS)
+        if memType == "INVALID":
+            close_isp_and_exit(isp, "[ERROR] invalid OSPI address")
+
+        packageName += "-" + memType + "-" + str(int(MEM_SIZE / (1024 * 1024)))
+        offsetName += "-" + memType + "-" + str(int(MEM_SIZE / (1024 * 1024)))
+
+    alif_image = "alif/" + packageName + "-" + rev_ext + env_ext + ".bin"
+    alif_offset = "alif/" + offsetName + "-" + rev_ext + env_ext + ".bin"
+
+    print(f"- Package: {alif_image}")
+    print(f"- Offset: {alif_offset}")
 
     if sys.platform in ["linux", "darwin"]:
         imageList = (
@@ -230,7 +262,7 @@ def main():
             + " "
             + alif_offset
             + " "
-            + hex(MRAM_BASE_ADDRESS + MRAM_SIZE - 16)
+            + hex(MEM_BASE_ADDRESS + MEM_SIZE - 16)
         )
     else:
         imageList = (
@@ -241,7 +273,7 @@ def main():
             + " ../"
             + alif_offset
             + " "
-            + hex(MRAM_BASE_ADDRESS + MRAM_SIZE - 16)
+            + hex(MEM_BASE_ADDRESS + MEM_SIZE - 16)
         )
 
     # check images exist...
@@ -252,6 +284,12 @@ def main():
     if not os.path.exists(alif_offset):
         print("Image " + alif_offset + " does not exist!")
         sys.exit(EXIT_WITH_ERROR)
+
+    # if ext OSPI is selected, and images exists, erase OSPI to continue
+    if args.memory:
+        # for now, OSPI sector size is fixed
+        ospi = OSPIMemoryHandler(isp, ALIF_BASE_ADDRESS, MEM_SIZE, ERASE_SECTOR_SIZE_4K)
+        ospi.erase_sectors()
 
     isp_start(isp)  # Start ISP Sequence
 
@@ -288,7 +326,8 @@ def main():
         isp_set_baud_rate(isp, baud_rate)
         isp.setBaudRate(baud_rate)
 
-    isp_reset(isp)
+    if not args.no_reset:
+        isp_reset(isp)
 
     isp.closeSerial()
 

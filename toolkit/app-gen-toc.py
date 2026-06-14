@@ -36,7 +36,8 @@ from utils.gen_fw_cfg import *
 # 0.31.000      strip console output to a minimum (includes printInfo)
 # 0.32.000      split image signature
 # 0.33.000      add mramAddress as sufix in content certificate name (to differentiate when using the same image name...)
-TOOL_VERSION = "0.33.000"
+# 0.34.000      Added PART# to ATOC Header - Now, each generated ATOC Package is tied to a specific device part number
+TOOL_VERSION = "0.34.000"
 
 EXIT_WITH_ERROR = 1
 
@@ -50,7 +51,7 @@ EXIT_WITH_ERROR = 1
 TOC_ENTRY_SIZE = 32
 TOC_HEADER_SIZE = 32
 TOC_TAIL_SIZE = 16
-TOC_HEADER_VERSION = 1
+TOC_HEADER_VERSION = 2
 
 # Supported CPU_ID for IMAGE object type
 SUPPORTED_CPU_ID = ["A32_0", "A32_1", "A32_2", "A32_3", "M55_HP", "M55_HE"]
@@ -88,6 +89,9 @@ CERT_CHAIN_SIZE = utils.toc_common.CERT_CHAIN_SIZE
 CONT_CERT_SIZE = utils.toc_common.CONT_CERT_SIZE
 CERT_CHAIN_SIZE = utils.toc_common.CERT_CHAIN_SIZE
 
+# change from marketing to add last digit as Product Revision => old devices hold null ('/0')
+DEVICE_PACKAGE_LEN = 16
+
 # Global Variables
 numImages = 0
 oemManagedAreaStartAddress = 0
@@ -124,7 +128,7 @@ def createOemTocPackage(fwsections, outputFile):
             imgFile += ".lzf"
 
         if img[6] == "encrypted":
-            imgFile = img[4][:-4] + "_enc.bin"
+            imgFile = img[4][:-4] + "_" + str(sec["mramAddress"]) + "_enc.bin"
 
         printInfo(img)
         mapf.write(f"{img[1]}\t{hex(img[2])}\t{img[2]}\t{img[3]}\t{imgFile}\n")
@@ -210,7 +214,7 @@ def createOemTocPackage(fwsections, outputFile):
         # copy image (check for encryption or compression - both are not supported!)
         binFile = sec["binary"]
         if "ENCRYPT" in sec["flags"]:
-            binFile = binFile[:-4] + "_enc.bin"
+            binFile = binFile[:-4] + "_" + str(sec["mramAddress"]) + "_enc.bin"
 
         if "COMPRESS" in sec["flags"]:
             binFile += ".lzf"
@@ -257,7 +261,10 @@ def createOemTocPackage(fwsections, outputFile):
     # TOC version
     outf.write(struct.pack("H", TOC_HEADER_VERSION))
     # pad 16 bytes with 00s
-    outf.write(("\0" * 16).encode("utf8"))
+    # outf.write(('\0' * 16).encode('utf8'))
+    outf.write(DEVICE_PACKAGE[3:].encode("utf8"))
+    if len(DEVICE_PACKAGE[3:]) < DEVICE_PACKAGE_LEN:
+        outf.write(struct.pack("B", 0))
 
     # mapf.write(f"{hostAddress(mPointer)}\t{hex(TOC_HEADER_SIZE)}\t{TOC_HEADER_SIZE}\tAPP TOC Header\n")
     mapf.write(
@@ -622,6 +629,7 @@ def main():
     global ALIF_BASE_ADDRESS
     global OEM_BASE_ADDRESS
     global APP_MRAM_SIZE
+    global DEVICE_PACKAGE
 
     if sys.version_info.major == 2:
         print("[ERROR] You need Python 3 for this application!")
@@ -684,6 +692,7 @@ def main():
     load_global_config()
     DEVICE_PART_NUMBER = utils.config.DEVICE_PART_NUMBER
     DEVICE_REVISION = utils.config.DEVICE_REVISION
+    DEVICE_PACKAGE = utils.config.DEVICE_PACKAGE
     ALIF_BASE_ADDRESS = utils.config.ALIF_BASE_ADDRESS
     MRAM_BASE_ADDRESS = utils.config.MRAM_BASE_ADDRESS
     OEM_BASE_ADDRESS = utils.config.APP_BASE_ADDRESS

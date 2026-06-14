@@ -5,6 +5,15 @@
 - 256 Bits (32 bytes) of total data
   * CP1    72    9
   * CP2    72    9
+  reg_0x144: 32-bit register containing
+      x-loc
+      y-loc
+      fab/wafer
+      year
+  reg_0x148: 32-bit register containing
+      work
+      week
+      lot number
 __author__ onyettr
 """
 
@@ -51,27 +60,34 @@ class CP_data_t:
         self.cp_SRAM_repaired = 0
         self.cp_future = 0
 
-    def otp_manufacture_bank_0_decode(self, message):
+    def otp_manufacture_bank_0_decode(self, mfr_data_message):
         """
         otp_manufacture_cp_fuses_decode
             parse otp Mfgr data
         """
 
-        if len(message) == 0:
+        if len(mfr_data_message) == 0:
             return
 
-        (self.cp_mfgr_id_x_loc,) = struct.unpack("<B", bytes(message[3:4]))
-        (self.cp_mfgr_id_y_loc,) = struct.unpack("<B", bytes(message[2:3]))
-        (self.cp_mfgr_id_wfr_id,) = struct.unpack("<B", bytes(message[1:2]))
+        (self.cp_mfgr_id_x_loc,) = struct.unpack("<B", bytes(mfr_data_message[3:4]))
+        (self.cp_mfgr_id_y_loc,) = struct.unpack("<B", bytes(mfr_data_message[2:3]))
+        (self.cp_mfgr_id_wfr_id,) = struct.unpack("<B", bytes(mfr_data_message[1:2]))
         self.cp_mfgr_id_fab = "UAS Global"
         if self.cp_mfgr_id_wfr_id & 0x80:
-            fab = "Other"
+            self.cp_mfgr_id_fab = "Other"
         self.cp_mfgr_id_wfr_id &= 0x1F
 
-        (self.cp_mfgr_id_lot_id_year,) = struct.unpack("<B", bytes(message[0:1]))
+        (self.cp_mfgr_id_lot_id_year,) = struct.unpack(
+            "<B", bytes(mfr_data_message[0:1])
+        )
         self.cp_mfgr_id_lot_id_year += 2020
 
-        (self.cp_mfgr_id_lot_id_workweek,) = struct.unpack("<B", bytes(message[7:8]))
+        (self.cp_mfgr_id_lot_id_workweek,) = struct.unpack(
+            "<B", bytes(mfr_data_message[7:8])
+        )
+
+        # message[6:7] = lot number (byte 6) - based on spec 0x148:23-16
+        (self.cp_mfgr_id_lot_id,) = struct.unpack("<B", bytes(mfr_data_message[6:7]))
 
     def display_manufacture_otp_info(self):
         """
@@ -88,6 +104,7 @@ class CP_data_t:
 
 
 def swap32(x):
+    """swap32 swap bytes in int32"""
     return (
         ((x << 24) & 0xFF000000)
         | ((x << 8) & 0x00FF0000)
@@ -96,14 +113,14 @@ def swap32(x):
     )
 
 
-def decode_otp_manufacture(message):
+def decode_otp_manufacture(mfr_data_message):
     """
     decode_otp_manufacture
         decode and display the OTP bits for manufatcuring
     """
     Bank0 = CP_data_t()
 
-    Bank0.otp_manufacture_bank_0_decode(message)
+    Bank0.otp_manufacture_bank_0_decode(mfr_data_message)
     #    isp_print_color('blue', "CP1\n")
     Bank0.display_manufacture_otp_info()
 
@@ -161,7 +178,7 @@ if __name__ == "__main__":
            x-loc: 11
            y-loc: 255
            wafer ID: 2
-           lot ID: UASY04001 
+           lot ID: UASY04001
     """
     real_data_1 = [
         0x59,
@@ -177,14 +194,14 @@ if __name__ == "__main__":
     #    decode_otp_manufacture(real_data_1) # OTP Bank 0
 
     """
-    Unit #2:    0x2F002144:  0x5902EF10       
+    Unit #2:    0x2F002144:  0x5902EF10
                 0x2F002148:  0x00000104
 
     Decoded by ATE s:
            x-loc: 16
            y-loc: 239
            wafer ID: 2
-           lot ID: UASY04001 
+           lot ID: UASY04001
     """
     real_data_2 = [
         0x59,
@@ -199,14 +216,14 @@ if __name__ == "__main__":
     #    decode_otp_manufacture(real_data_2) # OTP Bank 0
 
     """
-     Unit #3:   0x2F002144:  0x5902FE01       
+     Unit #3:   0x2F002144:  0x5902FE01
                 0x2F002148:  0x00000104
 
     Decoded by ATE as:
            x-loc: 1
            y-loc: 254
            wafer ID: 2
-           lot ID: UASY04001 
+           lot ID: UASY04001
 
     """
     real_data_3 = [
@@ -229,14 +246,14 @@ if __name__ == "__main__":
            x-loc: 18
            y-loc: 237
            wafer ID: 2
-           lot ID: UASY04001 
+           lot ID: UASY04001
     """
     real_data_4 = [0x12, 0xED, 0x02, 0x59, 0x00, 0x00, 0x04, 0x01]  # OTP Bank 2
     #         0x59, 0x02, 0xED, 0x12,    # OTP Bank 0
     #         0x00, 0x00, 0x01, 0x04]    # OTP Bank 2
 
-    decode_otp_manufacture(real_data_4)  # OTP Bank 0
-    print("")
+    #    decode_otp_manufacture(real_data_4) # OTP Bank 0
+    #    print("")
 
     """
     Real data form device
@@ -244,11 +261,20 @@ if __name__ == "__main__":
                   0x2F002148:  0x00000104
     As read from ISP
      MfgData        =  0x10459026897
-        ['0x97', '0x68', '0x2', '0x59', 
-         '0x4', '0x1', '0x0', '0x0', 
+        ['0x97', '0x68', '0x2', '0x59',
+         '0x4', '0x1', '0x0', '0x0',
      Endianess
     """
     real_data_5 = [0x97, 0x68, 0x2, 0x59, 0x0, 0x0, 0x4, 0x1]
-    decode_otp_manufacture(real_data_5)  # OTP Bank 0
+    #    decode_otp_manufacture(real_data_5) # OTP Bank 0
+
+    # Real EAGLE Manufacturing data
+    message = "050501060000020E0000012300000000000014803A5008A40000007000000080"
+    message = "04210771000000180000011600000000000015806100F983003C00B00000008C"
+    message = "051B01080000020E0000012400000000000013802170A7A40000008C00000090"
+
+    MfgData = message[0:32]  # bytes 94-125 (limit 126)
+    Mfg_data_bytes = bytes.fromhex(MfgData)
+    decode_otp_manufacture(Mfg_data_bytes)
 
     print("")

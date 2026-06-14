@@ -120,7 +120,7 @@
     },
     {
       "id": "LFXO_GM_CTRL",
-      "value": 15
+      "value": 8
     },
     {
       "id": "HFXO_CAP_CTRL",
@@ -137,6 +137,14 @@
     {
       "id": "SE_BOOT_INFO",
       "value": 1
+    },
+    {
+      "id": "SHARED_MEM_CTRL",
+      "value": "0x80000000"
+    },
+    {
+      "id": "REG_ALIASING_CTRL",
+      "value": "0x00000001"
     }
   ]
 }

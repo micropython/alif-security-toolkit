@@ -27,11 +27,11 @@
     },
     {
       "id": "LFXO_GM_CTRL",
-      "value": 15
+      "value": 8
     },
     {
       "id": "HFXO_CAP_CTRL",
-      "value": 2
+      "value": 7
     },
     {
       "id": "HFXO_PFET_GM_CTRL",

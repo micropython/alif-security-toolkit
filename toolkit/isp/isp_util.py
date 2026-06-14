@@ -14,6 +14,7 @@ from utils.toc_common import *
 import time
 
 DATA_CHUNK_SIZE = 240
+DATA_CHUNK_SIZE_OSPI = 128
 EXIT_WITH_ERROR = 1
 
 
@@ -27,9 +28,16 @@ def file_get_size(fileHandle):
     return sizeinbytes
 
 
-def progress_bar(fileName, currentSize=0, maxSize=0, enablePrint=True):
+def is_ospi_address(address):
+    return address >= 0xA0000000
+
+
+def progress_bar(fileName, currentSize=0, maxSize=0, enablePrint=True, unit=None):
     """
-    progress_bar - print a progress bar
+    progress_bar - print a progress bar with a customizable unit label (bytes or sectors).
+
+    The 'unit' parameter defaults to None to maintain backward compatibility.
+    If 'unit' is not provided, the old print format (with 'bytes') is used.
     """
     if maxSize <= 0:
         print("\n")
@@ -39,15 +47,19 @@ def progress_bar(fileName, currentSize=0, maxSize=0, enablePrint=True):
 
     hashes = int(progress / 5)
     printBar = fileName.ljust(32) + "[" + "#" * hashes + " " * (20 - hashes) + "]"
+
     if enablePrint:
-        progressVal = "%d%%: %d/%d bytes" % (progress, currentSize, maxSize)
+        # Check if the 'unit' parameter was explicitly passed
+        if unit:
+            # New behavior: Use the provided unit (e.g., "sectors")
+            progressVal = f"{progress}%: {currentSize}/{maxSize} {unit}"
+        else:
+            # Old behavior: Fallback to the original format (with "bytes")
+            progressVal = "%d%%: %d/%d bytes" % (progress, currentSize, maxSize)
     else:
         progressVal = " "
 
     print(printBar + progressVal + "\r", flush=True, end="")
-
-    #    if progress >= 100:
-    #       print("\n")
 
     return True
 
@@ -154,7 +166,6 @@ def burn_mram_isp(isp, handler, fileName, destAddress, verbose_display, auth_ima
             print("Image authentication failed!")
             return False
 
-    print("Download Image")
     try:
         f = open(fileName, "rb")
     except IOError as e:
@@ -164,16 +175,20 @@ def burn_mram_isp(isp, handler, fileName, destAddress, verbose_display, auth_ima
     with f:
         fileSize = file_get_size(f)
         offset = 0
-        data_size = DATA_CHUNK_SIZE
+        data_size = (
+            DATA_CHUNK_SIZE_OSPI if is_ospi_address(destAddress) else DATA_CHUNK_SIZE
+        )
         if fileSize <= data_size:  # Deal with small ones
             data_size = 16  # CHUNK_SIZE
 
+        # This sets up the state machine to burn NVM
         if isp_burn_mram(isp, destAddress, fileSize, token) == False:
             return False
 
         number_of_blocks = fileSize // data_size
         left_over_blocks = fileSize % data_size
 
+        print("Download Image")
         start_time = time.time()
         while number_of_blocks != 0:
             f.seek(offset)
@@ -206,7 +221,10 @@ def burn_mram_isp(isp, handler, fileName, destAddress, verbose_display, auth_ima
         delay = 0
         if auth_image:
             # add a delay to account for the image verification time
-            delay = fileSize / 1000000
+            delay = fileSize / 10000
+            # Make sure the delay is not too small
+            if delay < 1:
+                delay = 1
             print("Verify Image")
 
         isp_download_done(isp, delay)

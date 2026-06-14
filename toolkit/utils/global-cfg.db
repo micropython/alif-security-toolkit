@@ -1,7 +1,7 @@
 {
     "DEVICE": {
-        "Revision": "B4",
-        "Part#": "E7 (AE722F80F55D5LS) - 5.5 MRAM / 13.5 SRAM"
+        "Revision": "A1",
+        "Part#": "E8 (AE822FA0E5597LS0) - 5.5 MRAM / 9.75 SRAM"
     },
     "MRAM-BURNER": {
         "Interface": "isp",

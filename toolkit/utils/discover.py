@@ -3,8 +3,6 @@ import os
 import sys
 import shutil
 import subprocess
-import utils.config
-from utils.config import *
 
 CONF_FILE = "bin/ARMDS_dbg.cfg"
 Manufacturer = ""
@@ -44,6 +42,31 @@ def getJlinkSN():
     return sn[0]
 
 
+def get_selection(options):
+    """
+    select from a list of options
+    """
+
+    selection = 0
+    while selection == 0:
+        print("\nAvailable options:")
+        i = 1
+        for line in options:
+            # skip empty lines
+            if line == "":
+                continue
+
+            print(str(i) + ". " + line)
+            i += 1
+
+        selection = int(input("\nPlease select an option: "))
+        if selection > len(options) - 1 or selection == 0:
+            print("Please select a valid option!")
+            selection = 0
+
+    return selection
+
+
 def discover_Manufacturer(extensionDB):
     """
     ARM ULINK discovery
@@ -52,11 +75,7 @@ def discover_Manufacturer(extensionDB):
 
     print("\nDiscovering Manufacturer...")
 
-    cmd = (
-        'armdbg --cdb-root-ignore-default --cdb-root "'
-        + extensionDB
-        + '" --cdb-entry "?"'
-    )
+    cmd = 'armdbg --cdb-root-ignore-default --cdb-root "' + extensionDB + '" --cdb-list'
     p = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -65,23 +84,10 @@ def discover_Manufacturer(extensionDB):
         shell=True,
     )
     output, errors = p.communicate()
-    options = errors.splitlines()
+    options = output.splitlines()
 
-    selection = 0
-    while selection == 0:
-        print("\nAvailable options:")
-        i = 0
-        for line in options:
-            if i == 0:
-                i += 1
-                continue
-            print(str(i) + ". " + line)
-            i += 1
-
-        selection = int(input("\nPlease select an option: "))
-        if int(selection) > len(options) - 1:
-            print("Please select a valid option!")
-            selection = 0
+    # Skip the first item in the output as it is a message, not a Manufacturer
+    selection = get_selection(options[1:])
 
     Manufacturer = options[selection]
     print("Manufacturer: " + Manufacturer)
@@ -96,9 +102,9 @@ def discover_Platform(extensionDB):
     cmd = (
         'armdbg --cdb-root-ignore-default --cdb-root "'
         + extensionDB
-        + '" --cdb-entry "'
+        + '" --cdb-list="'
         + Manufacturer
-        + '::?"'
+        + '"'
     )
     p = subprocess.Popen(
         cmd,
@@ -108,29 +114,16 @@ def discover_Platform(extensionDB):
         shell=True,
     )
     output, errors = p.communicate()
-    options = errors.splitlines()
+    options = output.splitlines()
 
-    selection = 0
-    while selection == 0:
-        print("\nAvailable options:")
-        i = 0
-        for line in options:
-            if i == 0:
-                i += 1
-                continue
-            print(str(i) + ". " + line)
-            i += 1
-
-        selection = int(input("\nPlease select an option: "))
-        if int(selection) > len(options) - 1:
-            print("Please select a valid option!")
-            selection = 0
+    # Skip the first item in the output as it is a message, not a Platform
+    selection = get_selection(options[1:])
 
     Platform = options[selection]
     print("Platform: " + Platform)
 
 
-def discover_Connection(extensionDB, jtag_adapter):
+def discover_Connection(extensionDB):
     global Manufacturer
     global Platform
     global Connection
@@ -144,9 +137,7 @@ def discover_Connection(extensionDB, jtag_adapter):
         + Manufacturer
         + "::"
         + Platform
-        + "::Bare Metal Debug::Bare Metal Debug::Cortex-M0+::"
-        + jtag_adapter
-        + '" --cdb-entry-param "Connection=?" --browse '
+        + '::Bare Metal Debug::Bare Metal Debug::Cortex-M0+::ULINKpro" --browse '
     )
     p = subprocess.Popen(
         cmd,
@@ -158,21 +149,8 @@ def discover_Connection(extensionDB, jtag_adapter):
     output, errors = p.communicate()
     options = output.splitlines()
 
-    selection = 0
-    while selection == 0:
-        print("\nAvailable options:")
-        i = 0
-        for line in options:
-            if i == 0:
-                i += 1
-                continue
-            print(str(i) + ". " + line.strip())
-            i += 1
-
-        selection = int(input("\nPlease select an option: "))
-        if int(selection) > len(options) - 1:
-            print("Please select a valid option!")
-            selection = 0
+    # Skip the first item in the output as it is a message, not a Connection
+    selection = selection = get_selection(options[1:])
 
     Connection = options[selection].strip()
     print("Connection: " + Connection)
@@ -185,17 +163,9 @@ def discoverParameters():
     if sys.platform == "linux":
         extensionDB = "$HOME/developmentstudio-workspace/ExtensionDB"
 
-    # get JTAG Adatper from Global Configuration
-    load_global_config()
-    JTAG_ADAPTER = utils.config.JTAG_ADAPTER
-
-    print("Writing MRAM with parameters:")
-    print("Device Part# " + DEVICE_PART_NUMBER + " - Rev: " + DEVICE_REVISION)
-    print("- MRAM Base Address: " + hex(ALIF_BASE_ADDRESS))
-
     discover_Manufacturer(extensionDB)
     discover_Platform(extensionDB)
-    discover_Connection(extensionDB, JTAG_ADAPTER)
+    discover_Connection(extensionDB)
 
 
 def saveConfiguration():
@@ -210,6 +180,7 @@ def saveConfiguration():
 
 
 def getValues():
+
     if not os.path.exists(CONF_FILE):
         print("Configuration file doesn't exist. We will run the discovery process...")
         discoverParameters()

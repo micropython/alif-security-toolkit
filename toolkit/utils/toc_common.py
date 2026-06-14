@@ -101,7 +101,7 @@ def globalToLocalAddress(globalAddress):
     # 6      + 0x2000-0000
     # 7      - 0x1000-0000
 
-    # Global addresses definition for REV_Ax devices
+    # Global addresses definition for Fusion REV_Ax devices
     regions_Ax = [
         ["0x00000000", "0x20000000"],
         ["0x48000000", "0x4A000000"],
@@ -122,7 +122,7 @@ def globalToLocalAddress(globalAddress):
         ["-", "0x10000000"],
     ]
 
-    # Global addresses definition for REV_B0 devices
+    # Global addresses definition for Fusion REV_B0 devices
     regions_B0 = [
         ["0x02000000", "0x02400000"],  # SRAM0_BASE
         ["0x08000000", "0x08280000"],  # SRAM1_BASE
@@ -176,37 +176,29 @@ def globalToLocalAddress(globalAddress):
         ["+", "0x00000000"],
     ]
 
-    # Global addresses definition for REV_B0 devices
+    # Global addresses definition for Eagle devices
     regions_Eagle = [
-        ["0x02000000", "0x02400000"],  # SRAM0_BASE
-        ["0x08000000", "0x08280000"],  # SRAM1_BASE
+        ["0x02000000", "0x02800000"],  # SRAM_UNSTRIPED_BASE
+        ["0x03000000", "0x03800000"],  # SRAM_STRIPED_BASE
+        ["0x08000000", "0x08400000"],  # BOLT_SRAM1_BASE
         ["0x50000000", "0x50040000"],  # M55_HP_ITCM_BASE
         ["0x50800000", "0x50900000"],  # M55_HP_DTCM_BASE
         ["0x58000000", "0x58040000"],  # M55_HE_ITCM_BASE
         ["0x58800000", "0x58840000"],  # M55_HE_DTCM_BASE
-        ["0x62000000", "0x62100000"],  # MODEM_ITCM_BASE
-        ["0x62100000", "0x62200000"],  # MODEM_DTCM_BASE
-        ["0x63000000", "0x63080000"],  # DSP_ITCM_BASE
-        ["0x63100000", "0x63300000"],  # DSP_DTCM_BASE
-        ["0x60000000", "0x60040000"],  # GNSS_ITCM_BASE
-        ["0x60040000", "0x600C0000"],  # GNSS_DTCM_BASE
         ["0x80000000", "0x80600000"],  # MRAM_BASE
+        ["0xA0000000", "0xE0000000"],  # OSPI_BASE
     ]
 
     deltas_Eagle = [
         ["+", "0x60000000"],
         ["+", "0x60000000"],
+        ["+", "0x60000000"],
         ["+", "0x44000000"],
         ["+", "0x44000000"],
         ["+", "0x40000000"],
         ["+", "0x40000000"],
-        ["+", "0x3C000000"],
-        ["+", "0x3C000000"],
-        ["+", "0x3C000000"],
-        ["+", "0x3C000000"],
-        ["+", "0x3C000000"],
-        ["+", "0x3C000000"],
         ["+", "0x10000000"],
+        ["+", "0x00000000"],
     ]
 
     # create a list of valid global regions
@@ -517,6 +509,16 @@ def createContentCerts(fwsections, prefix):
         textFile = "images.txt"
         if os.path.exists(imagePath / textFile):
             os.remove(imagePath / textFile)
+
+        # rename encrypted binary to avoid overwrite in case 2 or more images use the same binary name (like in SERAM....)
+        if "ENCRYPT" in sec["flags"]:
+            binaryFile = sec["binary"][:-4] + "_enc.bin"
+            encrytedFile = (
+                sec["binary"][:-4] + "_" + str(sec["mramAddress"]) + "_enc.bin"
+            )
+            if os.path.exists(imagePath / encrytedFile):
+                os.remove(imagePath / encrytedFile)
+            os.rename(imagePath / binaryFile, imagePath / encrytedFile)
 
 
 def getObjectType(objType, switcher):

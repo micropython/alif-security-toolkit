@@ -7,14 +7,16 @@ from utils.config import *
 from utils.toc_common import *
 import json
 from json.decoder import JSONDecodeError
+from utils.app_assets_encrypt import *
 
 # Define Version constant for each separate tool
 # 0.01.000   Initial version
 # 0.02.000   added checksum for integrity
-#           passed ASSET_TYPE as a flag and used this placeholder for checksum
-TOOL_VERSION = "0.02.000"
+# 0.03.000   added encrypted assets option
+TOOL_VERSION = "0.03.000"
 
 EXIT_WITH_ERROR = 1
+EXIT_NO_ERROR = 0
 
 # OUTPUT_FILE = 'build/assets-rev-b0.bin'
 ASSET_ID = "APPASSET"
@@ -23,7 +25,15 @@ CHECK_SUM = 0x00
 
 HBK0_KEY = "utils/key/hbk1.bin"
 PROV_KEY = "utils/key/oem_prov_asset.bin"
+PROV_PKG = "utils/key/oem_prov_asset_pkg.bin"
 ENC_KEY = "utils/key/oem_enc_asset.bin"
+ENC_PKG = "utils/key/oem_enc_asset_pkg.bin"
+REQ_PKG = "utils/key/oem_request_pkg.bin"
+RSP_PKG = "utils/key/icv_response_pkg.bin"
+
+OEM_ROT_KEY_PAIR = "utils/key/OEMRoT_key_pair.pem"
+OEM_ENC_KEY = "utils/key/oem_tmp_enc_key.pem"
+OEM_ENC_PUBLIC = "utils/key/oem_tmp_enc_pub_key.pem"
 
 # DO NOT Alter the sequence of the following items in the list as it determines
 # the bit position in the final value
@@ -64,12 +74,19 @@ def create_package(outFile):
         f.write(struct.pack("I", OPTION_FLAGS))
         with open(HBK0_KEY, "rb") as i:
             f.write(i.read())
-        with open(PROV_KEY, "rb") as i:
-            f.write(i.read())
-        f.write(("\0" * 48).encode("utf8"))
-        with open(ENC_KEY, "rb") as i:
-            f.write(i.read())
-        f.write(("\0" * 48).encode("utf8"))
+        if OPTION_FLAGS & (1 << 0):
+            # encrypted assets
+            with open(PROV_PKG, "rb") as i:
+                f.write(i.read())
+            with open(ENC_PKG, "rb") as i:
+                f.write(i.read())
+        else:
+            with open(PROV_KEY, "rb") as i:
+                f.write(i.read())
+            f.write(("\0" * 48).encode("utf8"))
+            with open(ENC_KEY, "rb") as i:
+                f.write(i.read())
+            f.write(("\0" * 48).encode("utf8"))
 
 
 def decodeFlags(assetFlags):
@@ -131,6 +148,16 @@ def addChecksum(outFile):
     with open(outFile, "r+b") as f:
         f.seek(10)
         f.write(struct.pack("H", total))
+
+
+def cleanup():
+    # remove temporary files
+    if os.path.exists(OEM_ROT_KEY_PAIR):
+        os.remove(OEM_ROT_KEY_PAIR)
+    if os.path.exists(OEM_ENC_KEY):
+        os.remove(OEM_ENC_KEY)
+    if os.path.exists(OEM_ENC_PUBLIC):
+        os.remove(OEM_ENC_PUBLIC)
 
 
 def main():
@@ -204,8 +231,34 @@ def main():
                 if cfg[option].upper() == "ON":
                     OPTION_FLAGS |= 1 << OPTIONS.index(option)
                     if option == "ENCRYPTED_ASSETS":
-                        print("ENCRYPTED ASSETS Option is not supported yet")
-                        sys.exit(EXIT_WITH_ERROR)
+                        if not os.path.exists(REQ_PKG):
+                            generate_request()
+                            cleanup()
+                            print(
+                                "\n*******************************************************************************"
+                            )
+                            print("The request package has been generated: " + REQ_PKG)
+                            print("Please send it to Alif to get the response package")
+                            print(
+                                "*******************************************************************************"
+                            )
+                            sys.exit(EXIT_NO_ERROR)
+                        if not os.path.exists(RSP_PKG):
+                            print(
+                                "\n*******************************************************************************"
+                            )
+                            print("The request package exists: " + REQ_PKG)
+                            print(
+                                "It should be sent to Alif to get the response package"
+                            )
+                            print(
+                                "If you want to generate a new request package, please delete the existing one"
+                            )
+                            print(
+                                "*******************************************************************************"
+                            )
+                            sys.exit(EXIT_NO_ERROR)
+                        encrypt_package()
 
         create_package(outFile)
         addChecksum(outFile)

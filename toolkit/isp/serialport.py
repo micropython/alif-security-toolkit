@@ -45,10 +45,11 @@ class serialPort:
         self.serialData = serial.Serial()
         self.baudRate = baudRate
         self.portName = COM_PORT_DEFAULT
+        self.portOverride = False
         self.timeOut = COM_TIMEOUT_RX_DEFAULT
         self.writeTimeout = COM_TIMEOUT_TX_DEFAULT
         """
-           Related to ISP handling 
+           Related to ISP handling
         """
         self.verboseMode = False
         self.exit_on_nack = True
@@ -84,6 +85,13 @@ class serialPort:
         """
         return self.serialData.port
 
+    def setPort(self, com_port):
+        """
+        setPort
+        """
+        self.portName = com_port
+        self.portOverride = True
+
     def setSerialFile(self, filename):
         """
         save serial information to a local file
@@ -91,16 +99,16 @@ class serialPort:
         try:
             fs = open(filename, "w")
         except IOError as e:
-            print("[ERROR] setSerialFile {0}".format(e))
+            print(f"[ERROR] setSerialFile {e}")
             sys.exit()
         with fs:
-            fs.write("comport %s\n" % self.portName)
-            fs.write("timeout tx %d\n" % self.writeTimeout)
-            fs.write("timeout rx %d\n" % self.timeOut)
-            fs.write("stopbits %d\n" % self.serialData.stopbits)
-            fs.write("bytesize %d\n" % self.serialData.bytesize)
-            fs.write("rtscts %d\n" % self.serialData.rtscts)
-            fs.write("xonxoff %d\n" % self.serialData.xonxoff)
+            fs.write(f"comport {self.portName}\n")
+            fs.write(f"timeout tx {self.writeTimeout}\n")
+            fs.write(f"timeout rx {self.timeOut}\n")
+            fs.write(f"stopbits {self.serialData.stopbits}\n")
+            fs.write(f"bytesize {self.serialData.bytesize}\n")
+            fs.write(f"rtscts   {self.serialData.rtscts}\n")
+            fs.write(f"xonxoff  {self.serialData.xonxoff}\n")
             #            fs.write('parity      %d\n'%self.serialData.parity)
 
             fs.close()
@@ -111,15 +119,13 @@ class serialPort:
         if file does not exist we raise an exception
         """
         portName = ""
-
         self.PrintStr("[DBG] getSerialFile - starts %s" % (filename))
 
         # test of the config file exists
         try:
             fs = open(filename, "r")
-            self.PrintStr("[DBG] getSerialFile opened %s" % (filename))
+            self.PrintStr(f"[DBG] getSerialFile opened {filename}")
         except IOError as e:
-            #            self.PrintStr('[ERROR] getSerialFile {0}'.format(e))
             self.PrintStr("[INFO] getSerialFile - no config file}")
             raise
         else:
@@ -133,9 +139,7 @@ class serialPort:
 
         self.portName = portName
 
-        self.PrintStr(
-            "[DBG] getSerialFile baud %d port %s" % (self.baudRate, self.portName)
-        )
+        self.PrintStr(f"[DBG] getSerialFile baud {self.baudRate} port {self.portName}")
 
         return self.portName, self.baudRate
 
@@ -182,10 +186,13 @@ class serialPort:
         self.PrintStr("[DBG] openSerial STARTS")
 
         # read config file - if it doesnt exist we can discover
-        try:
-            self.portName, self.baudRate = self.getSerialFile(COM_FILE_DEFAULT)
-        except:
-            self.discoverSerialPorts()
+        if self.portOverride:
+            print(f"[INFO] port override {self.portName}")
+        else:
+            try:
+                self.portName, self.baudRate = self.getSerialFile(COM_FILE_DEFAULT)
+            except:
+                self.discoverSerialPorts()
 
         self.serialData.port = self.portName
         self.serialData.baudrate = self.baudRate
@@ -197,14 +204,14 @@ class serialPort:
         self.serialData.dsrdtr = False
         self.serialData.xonxoff = False
 
-        self.PrintStr("[DBG] openSerial Baud rate %d" % self.serialData.baudrate)
-        self.PrintStr("[DBG] openSerial COM port  %s" % self.serialData.port)
+        self.PrintStr(f"[DBG] openSerial Baud rate {self.serialData.baudrate}")
+        self.PrintStr(f"[DBG] openSerial COM port  {self.serialData.port}")
 
         try:
-            self.PrintStr("[DBG] openSerial %s" % self.serialData.port)
+            self.PrintStr(f"[DBG] openSerial {self.serialData.port}")
             self.serialData.open()
         except serial.SerialException as e:
-            self.PrintStr("[ERROR] openSerial %s" % str(e))
+            self.PrintStr(f"[ERROR] openSerial {str(e)}")
             self.serialData.close()
 
             return False
@@ -212,7 +219,7 @@ class serialPort:
         self.serialData.flushInput()
         self.serialData.flushOutput()
 
-        self.PrintStr("[DBG] openSerial DONE %s" % self.serialData.port)
+        self.PrintStr(f"[DBG] openSerial DONE {self.serialData.port}")
 
         return True
 
@@ -223,11 +230,11 @@ class serialPort:
         """
         try:
             self.serialData.close()
-            self.PrintStr("[INFO] %s closeSerial success" % self.serialData.port)
+            self.PrintStr(f"[INFO] {self.serialData.port} closeSerial success")
 
             ErrorCode = True
         except:
-            self.PrintStr("[ERROR] %s closeSerial failed" % self.serialData.port)
+            self.PrintStr("[ERROR] {self.serialData.port} closeSerial failed")
             ErrorCode = False
 
         return ErrorCode
@@ -242,18 +249,20 @@ class serialPort:
             data = self.serialData.read(numberBytes)
             if data != []:
                 data = list(bytearray(data))
-            self.PrintStr("[DBG] readSerial %d bytes " % len(data))
-            self.PrintStr("[DBG] " % data)
+            self.PrintStr(f"[DBG] readSerial {len(data)} bytes ")
+            self.PrintStr(f"[DBG] {data}")
         except serial.SerialException as e:
             self.PrintStr(
-                "[ERROR] %s readSerial reporting disconnected" % (self.serialData.port)
+                f"[ERROR] {self.serialData.port} readSerial reporting disconnected"
             )
 
             # Reset the Terminal of any ANSI Escape sequence debris
             print("\033[0m")
             print("\033[?25h")  # Cursor reenables
-
-            return []
+            sys.exit(
+                1
+            )  # cable is disconnected, exit so user reconnects and runs the tool again
+            # return []
 
         return data
 
@@ -265,13 +274,13 @@ class serialPort:
         try:
             sent = self.serialData.write(bytearray(bytetoWrite))
             self.serialData.flush()
-            self.PrintStr("[DBG] writeSerial sent %d " % sent)
+            self.PrintStr(f"[DBG] writeSerial sent {sent}")
             return True
         except serial.SerialTimeoutException:
-            self.PrintStr("[ERROR] %s writeSerial Timeout" % self.serialData.port)
+            self.PrintStr(f"[ERROR] {self.serialData.port} writeSerial Timeout")
             return False
         except serial.SerialException as e:
-            self.PrintStr("[ERROR] %s writeSerial write failed" % self.serialData.port)
+            self.PrintStr(f"[ERROR] {self.serialData.port} writeSerial write failed")
             print(e)
             self.serialData.flushOutput()
             return False
@@ -279,17 +288,42 @@ class serialPort:
         return True
 
     def setBaudRate(self, new_baud_rate):
+        """setBaudRate
+
+        Args:
+          self
+          new_naud_rate
+        """
         self.serialData.baudrate = new_baud_rate
         time.sleep(1)
         self.serialData.flush()
         self.serialData.flushInput()
         self.serialData.flushOutput()
 
+    def getBaudRate(self):
+        """getBadrate
+
+        Args:
+           self
+        """
+        return self.serialData.baudrate
+
     def setTimeout(self, new_timeout):
+        """setTimeout
+
+        Args:
+           self
+           new_timeout
+        """
         self.serialData.timeout = new_timeout
 
-    def getBaudRate(self):
-        return self.serialData.baudrate
+    def getTimeout(self):
+        """getTimeout
+
+        Args:
+           self
+        """
+        return self.serialData.timeout
 
     def discoverSerialPorts(self):
         """
@@ -302,14 +336,13 @@ class serialPort:
             return None
 
         AvailablePorts = list_ports.comports()
-        PortCount = 0
 
         if not AvailablePorts:
             self.PrintStr("[ERROR] Cannot found active COM port")
             return False
 
         #        self.PrintStr("COM ports detected = %d" %len(AvailablePorts))
-        print("COM ports detected = %d" % len(AvailablePorts))
+        print(f"COM ports detected = {len(AvailablePorts)}")
 
         for comPorts in AvailablePorts:
             print("-> {:20}".format(comPorts.device))
@@ -334,9 +367,9 @@ class serialPort:
                 break
 
         if ErrorCode is True:
-            self.PrintStr("[DBG] Port Name %s" % self.serialData.port)
+            self.PrintStr(f"[DBG] Port Name {self.serialData.port}")
         else:
-            self.PrintStr("[ERROR] %s is not a valid port name" % self.serialData.port)
+            self.PrintStr(f"[ERROR] {self.serialData.port} is not a valid port name")
 
         self.setSerialFile(COM_FILE_DEFAULT)
 

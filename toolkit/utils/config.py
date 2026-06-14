@@ -52,6 +52,29 @@ SERAM_BANKS = 0
 # ALIF TOC POINTER SIZE (pointers to)
 ALIF_TOC_POINTER_SIZE = 16
 
+# ALIF PACKAGE SIZE (only used for OSPI EXT MEM in EAGLE)
+ALIF_EAGLE_OSPI_PACKAGE_SIZE = 0x80000  # 512KB
+OSPI0_MEM_ADDRESS = 0xA0000000
+OSPI1_MEM_ADDRESS = 0xC0000000
+
+
+def getOspiMemTypeFromAddress(address):
+    if address == OSPI1_MEM_ADDRESS:
+        return "ospi1"
+    elif address == OSPI0_MEM_ADDRESS:
+        return "ospi0"
+    else:
+        return "INVALID"
+
+
+def getAddressFromOspiMemType(memType):
+    if memType == "ospi1":
+        return OSPI1_MEM_ADDRESS
+    elif memType == "ospi0":
+        return OSPI0_MEM_ADDRESS
+    else:
+        return 0x00
+
 
 def read_global_config(file):
     #    print("Opening file %s" % file);
@@ -101,6 +124,8 @@ def checkAttribute(cfg, attribute):
 
 
 def getPartDescription(devPartNumber):
+    # strip '\0' character in 16th position from Part# for old Part# numbering (15-char part#)
+    devPartNumber = devPartNumber.rstrip("\0")
     # read devices DB
     db = read_global_config(DEVICE_DB_FILE)
     partDescription = ""

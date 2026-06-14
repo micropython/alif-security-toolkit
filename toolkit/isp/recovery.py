@@ -25,6 +25,7 @@ from isp_util import *
 import utils.config
 from utils.config import *
 from utils.user_validations import validateArgList
+from utils.ospi_mem_handler import OSPIMemoryHandler
 import device_probe
 import time
 
@@ -37,51 +38,79 @@ PROBE_NO_MESSAGE = 3
 BRING_UP_MODE = 1
 
 
-def write_mram(isp, fileName, destAddress, verbose_display):
+def write_memory(isp, fileName, destAddress, verbose_display, ext_ospi=False):
     """
-    write_mram - use ISP method to write MRAM
+    write_memory - use ISP method to write MRAM and OSPI memories
     """
+    if verbose_display:
+        print(f"[DEBUG] Starting write_memory for file: {fileName}")
+        print(f"[DEBUG] Destination address (hex string): {hex(destAddress)}")
+
     try:
         f = open(fileName, "rb")
+
     except IOError as e:
+        # Assuming close_isp_and_exit is a function that handles termination
         close_isp_and_exit(isp, "[ERROR] {0}".format(e))
 
+    # Using 'with f:' ensures the file is closed automatically
     with f:
         fileSize = file_get_size(f)
-        #        print("FILESIZE = %d" %fileSize)
+        if verbose_display:
+            print(f"[DEBUG] File size: {fileSize:#x} bytes ({fileSize} decimal)")
 
-        # SEROM Recovery uses an Offset rather than an address
-        MRAM_BASE_ADDRESS = utils.config.MRAM_BASE_ADDRESS
         offset = 0
         data_size = 16
-        writeAddress = int(destAddress, base=16) - MRAM_BASE_ADDRESS
 
-        #        print("Actual offset = ", hex(writeAddress))
-        number_of_blocks = fileSize // data_size
-        left_over_blocks = fileSize % data_size
+        if verbose_display:
+            print(f"[DEBUG] Calculated memory-relative offset: {destAddress:#x}")
 
         start_time = time.time()
-        while number_of_blocks != 0:
+
+        # --- ROBUST LOOP LOGIC: Ensure ALL bytes are written (fixes last block skip) ---
+        while offset < fileSize:
             f.seek(offset)
-            mram_line = f.read(data_size)
+
+            # Read 16 bytes, or fewer if it's the very last part of the file
+            bytes_to_read = min(data_size, fileSize - offset)
+            mram_line = f.read(bytes_to_read)
+
+            if not mram_line:
+                break
 
             if verbose_display is False:
-                progress_bar(fileName, offset + data_size, fileSize)
-            message = isp_mram_write(isp, writeAddress, mram_line)
+                # Progress bar reflects actual offset and total size
+                progress_bar(fileName, offset + len(mram_line), fileSize)
+            else:
+                # Print debug info with actual size and data
+                print(
+                    f"[DEBUG] Writing block at offset {hex(destAddress)}, size {len(mram_line)}, data: {mram_line.hex()}"
+                )
 
-            number_of_blocks = number_of_blocks - 1
-            offset = offset + data_size
-            writeAddress = writeAddress + data_size  # increment by 16
+            if ext_ospi:
+                isp_ospi_write(isp, destAddress, mram_line)
+            else:
+                isp_mram_write(isp, destAddress, mram_line)
+
+            # Increment by the actual number of bytes written
+            increment = len(mram_line)
+            offset += increment
+            destAddress += increment
+
             if isp.CTRLCHandler.Handler_exit():
                 close_isp_and_exit(
                     isp, "[INFO] CTRL-C detected. User aborted this process"
                 )
+        # --- END ROBUST LOOP ---
 
         end_time = time.time()
-        print("\r")
+        print("\r")  # Print carriage return once after the loop finishes
 
         if verbose_display is False:
-            print("[INFO] recovery time {:10.2f} seconds".format(end_time - start_time))
+            print(f"[INFO] recovery time: {end_time - start_time:10.2f} seconds")
+
+        if verbose_display:
+            print(f"[DEBUG] Finished write_memory for file: {fileName}")
 
     f.close()
 
@@ -112,12 +141,13 @@ def checkTargetWithSelection(
             save_global_config(targetDescription, targetRevision)
 
 
-def recovery_action_no_reset(isp):
+def recovery_core(isp, ext_ospi=False):
     """
-    Recover MRAM via SEROM. Do not reset the device at the end.
+    The recovery logic
     """
     # probe the device before update
     device = device_probe.device_get_attributes(isp)
+
     # check SERAM is the bootloader stage
     print("Bootloader stage: " + device_probe.STAGE_TEXT[device.stage])
     if device.stage == device_probe.STAGE_SERAM:
@@ -125,42 +155,20 @@ def recovery_action_no_reset(isp):
             isp, "[ERROR] Device not in Recovery mode, use updateSystemPackage Tool"
         )
 
-    if device.revision == "B2":  # Device Part# is not retrieved by SEROM in B2
-        # load parameters based on Part# selected in tools-config
-        load_global_config()
-        print("Device Revision: " + device.revision)
-    else:
-        if ord(device.part_number[:1]) == 0:  # blank Part#
-            if BRING_UP_MODE:
-                print("Bring Up mode - Blank part detected!")
-                if device.revision in ["B0", "B2", "B3", "B4"]:  # Ensemble
-                    device.part_number = "AE722F80F55D5LS"
-                elif device.revision in ["EG"]:  # Eagle A0
-                    device.part_number = "AE722F80F55D5EG"
-                    device.revision = "A0"
-                elif device.revision in ["B1", "A0", "A5"]:  # Balletto B1C / E1C
-                    device.part_number = "AB1C1F4M51820PH"
-                else:
-                    close_isp_and_exit(
-                        isp, "[ERROR] Revision is not recognized: " + device.revision
-                    )
-            else:
-                close_isp_and_exit(isp, "[ERROR] There is no Part# in the device!")
+    # selected device from global-cfg.db
+    selectedDescription = utils.config.DEVICE_PART_NUMBER
+    selectedRevision = utils.config.DEVICE_REVISION
 
-        # selected device from global-cfg.db
-        selectedDescription = utils.config.DEVICE_PART_NUMBER
-        selectedRevision = utils.config.DEVICE_REVISION
-
-        # print detected device
-        print("Detected Part#: " + device.part_number)
-        print("Detected Revision: " + device.revision)
-        partDescription = getPartDescription(device.part_number)
-        # load configuration from detected device
-        load_device_config(partDescription, device.revision)
-        # check the default Part#/Rev in tools-config and offer to switch
-        checkTargetWithSelection(
-            partDescription, device.revision, selectedDescription, selectedRevision
-        )
+    # print detected device
+    print("Detected Part#: " + device.part_number)
+    print("Detected Revision: " + device.revision)
+    partDescription = getPartDescription(device.part_number)
+    # load configuration from detected device
+    load_device_config(partDescription, device.revision)
+    # check the default Part#/Rev in tools-config and offer to switch
+    checkTargetWithSelection(
+        partDescription, device.revision, selectedDescription, selectedRevision
+    )
 
     # update params from either selected part (B2) or detected part (B3/B4, etc)
     DEVICE_PART_NUMBER = utils.config.DEVICE_PART_NUMBER
@@ -168,90 +176,137 @@ def recovery_action_no_reset(isp):
     DEVICE_PACKAGE = utils.config.DEVICE_PACKAGE
     DEVICE_REV_PACKAGE_EXT = utils.config.DEVICE_REV_PACKAGE_EXT
     DEVICE_OFFSET = utils.config.DEVICE_OFFSET
-    MRAM_BASE_ADDRESS = utils.config.MRAM_BASE_ADDRESS
-    ALIF_BASE_ADDRESS = utils.config.ALIF_BASE_ADDRESS
-    MRAM_SIZE = utils.config.MRAM_SIZE
     HASHES_DB = utils.config.HASHES_DB
 
-    if device.revision == "B2":
-        if device.revision != DEVICE_REVISION:
+    # check if OSPI Recovery was requested
+    if ext_ospi:
+        print("[INFO] OSPI Recovery requested")
+        # check if device supports OSPI and if it's enabled in OTP
+        if device.supports_ospi:
+            print("[INFO] Device supports OSPI external memory")
+            if device.is_ospi_enabled(isp):
+                print("[INFO] OSPI is enabled in OTP")
+            else:
+                print("[INFO] OSPI is NOT enabled in OTP")
+                close_isp_and_exit(isp, "[ERROR] OSPI is not enabled in OTP")
+        else:
             close_isp_and_exit(
                 isp,
-                "[ERROR] Target device revision (%s) mismatch with configured device (%s)"
-                % (device.revision, DEVICE_REVISION),
+                "[ERROR] OSPI Recovery mode requested, but device does not support OSPI memory",
             )
+        # retrieve OSPI parameters
+        MEM_BASE_ADDRESS, MEM_SIZE, ALIF_BASE_ADDRESS, EXT_MEMORY_TYPE = (
+            device.get_ospi_params()
+        )
+    else:
+        # set MRAM params
+        print("[INFO] SERAM in MRAM memory")
+        MEM_BASE_ADDRESS = utils.config.MRAM_BASE_ADDRESS
+        ALIF_BASE_ADDRESS = utils.config.ALIF_BASE_ADDRESS
+        MEM_SIZE = utils.config.MRAM_SIZE
 
-    env_ext = ""
-    if device.env.lower() in HASHES_DB:
-        if HASHES_DB[device.env] == "DEV":
-            env_ext = "-dev"
+    print(
+        f"ALIF_BASE_ADDRESS {hex(ALIF_BASE_ADDRESS)} alif_offset {hex(MEM_BASE_ADDRESS + MEM_SIZE - 16)}"
+    )
 
-    # for devices in CM LCS, we use the DEV package
-    if device.env == "00000000000000000000000000000000":
-        print("Device is not provisioned!")
-        env_ext = "-dev"
-
-    # Start the recovery process
+    # -----------------------
+    # Print recovery parameters
+    # -----------------------
     print("[INFO] System TOC Recovery with parameters:")
-    print("- Device Part# " + DEVICE_PART_NUMBER + " - Rev: " + DEVICE_REVISION)
-    print("- MRAM Base Address: " + hex(ALIF_BASE_ADDRESS))
+    print(f"- Device Part# {DEVICE_PART_NUMBER} - Rev: {DEVICE_REVISION}")
+    if ext_ospi:
+        print(f"- OSPI Base Address: {hex(MEM_BASE_ADDRESS)}")
+        print(f"- OSPI Size: {hex(MEM_SIZE)}")
+    else:
+        print(f"- ALIF Base Address: {hex(ALIF_BASE_ADDRESS)}")
 
     argList = ""
     action = "Burning: "
 
-    rev_ext = DEVICE_REV_PACKAGE_EXT[DEVICE_REVISION]
-    alif_image = "alif/" + DEVICE_PACKAGE + "-" + rev_ext + env_ext + ".bin"
-    alif_offset = "alif/" + DEVICE_OFFSET + "-" + rev_ext + env_ext + ".bin"
+    env_ext = ""
+    if device.env == "DEV":
+        env_ext = "-dev"
 
-    # check images exist...
+    rev_ext = DEVICE_REV_PACKAGE_EXT[device.revision]
+
+    packageName = DEVICE_PACKAGE
+    offsetName = DEVICE_OFFSET
+    # add suffix for external memory
+    if ext_ospi:
+        memType = getOspiMemTypeFromAddress(MEM_BASE_ADDRESS)
+        if memType == "INVALID":
+            close_isp_and_exit(isp, "[ERROR] invalid OSPI address")
+
+        packageName += "-" + memType + "-" + str(int(MEM_SIZE / (1024 * 1024)))
+        offsetName += "-" + memType + "-" + str(int(MEM_SIZE / (1024 * 1024)))
+
+    alif_image = "alif/" + packageName + "-" + rev_ext + env_ext + ".bin"
+    alif_offset = "alif/" + offsetName + "-" + rev_ext + env_ext + ".bin"
+
+    print(f"- Package: {alif_image}")
+    print(f"- Offset: {alif_offset}")
+
+    # -----------------------
+    # Check files exist
+    # -----------------------
     if not os.path.exists(alif_image):
-        close_isp_and_exit(isp, "Image " + alif_image + " does not exist!")
+        close_isp_and_exit(isp, f"[ERROR] Image {alif_image} does not exist!")
 
     if not os.path.exists(alif_offset):
-        close_isp_and_exit(isp, "Image " + alif_offset + " does not exist!")
+        close_isp_and_exit(isp, f"[ERROR] Image {alif_offset} does not exist!")
 
-    argList = (
-        "../"
-        + alif_image
-        + " "
-        + hex(ALIF_BASE_ADDRESS)
-        + " ../"
-        + alif_offset
-        + " "
-        + hex(MRAM_BASE_ADDRESS + MRAM_SIZE - 16)
-    )
+    if ext_ospi:
+        # Erase OSPI before writing
+        ospi = OSPIMemoryHandler(isp, ALIF_BASE_ADDRESS, MEM_SIZE, ERASE_SECTOR_SIZE_4K)
+        ospi.erase_sectors()
 
-    # validate all parameters
-    # argList = validateArgList(action, argList.strip())
-    if sys.platform == "linux" or sys.platform == "darwin":
-        argList = argList.replace("../", "")
+        # Calculate the OSPI-relative address for writing
+        ospi_relative_address = ALIF_BASE_ADDRESS - MEM_BASE_ADDRESS
+        print(
+            f"[INFO] Writing main OSPI image '{alif_image}' to address {hex(ospi_relative_address)}"
+        )
+        write_memory(isp, alif_image, ospi_relative_address, False, True)
+
+        ospi_relative_address = MEM_SIZE - 16
+        print(
+            f"[INFO] Writing offset '{alif_offset}' to address {hex(ospi_relative_address)}"
+        )
+        write_memory(isp, alif_offset, ospi_relative_address, False, True)
     else:
-        argList = argList.replace("/", "\\")
+        mram_relative_address = ALIF_BASE_ADDRESS - MEM_BASE_ADDRESS
+        print(
+            f"[INFO] Writing main MRAM image '{alif_image}' to address {hex(mram_relative_address)}"
+        )
+        write_memory(isp, alif_image, mram_relative_address, False, False)
 
-    items = argList.split(" ")
-
-    for e in range(1, len(items), 2):
-        addr = items[e]
-        fileName = items[e - 1]
-        fileName = fileName.replace("..\\", "")
-
-        write_mram(isp, fileName, addr, False)
-
-    recovery_end_exit()
-
-
-def recovery_action(isp):
-    """
-    Recover MRAM via SEROM. Reset the device at the end.
-    """
-
-    recovery_action_no_reset(isp)
-
-    print("[INFO] Target reset")
-    isp_reset(isp)  # Reset the target
-    recovery_end_exit()
+        mram_relative_address = MEM_SIZE - 16
+        print(
+            f"[INFO] Writing offset '{alif_offset}' to address {hex(mram_relative_address)}"
+        )
+        write_memory(isp, alif_offset, mram_relative_address, False, False)
 
 
 def recovery_end_exit():
     print("Recovery process finished. Please reload maintenance tool for verification")
     sys.exit(0)
+
+
+# Entry points for recovery actions (from SEROM Recovery menu)
+def recovery_action_no_reset(isp):
+    recovery_core(isp)
+    recovery_end_exit()
+
+
+def recovery_action(isp):
+    recovery_core(isp)
+    print("[INFO] Target reset")
+    isp_reset(isp)  # Reset the target
+    recovery_end_exit()
+
+
+def recovery_ospi_action_no_reset(isp):
+    """
+    Recover OSPI via SEROM. Do not reset the device at the end.
+    """
+    recovery_core(isp, True)
+    recovery_end_exit()

@@ -37,7 +37,8 @@ def mram_size_to_address(mram_size):
 
 
 def handle_sram(sram_size, firewall_components, protected_areas):
-    if "13.5" == sram_size:  # no SRAM wounding
+
+    if "13.5" == sram_size or "9.75" == sram_size:  # no SRAM wounding
         # print("**** no SRAM wounding")
         return
 
@@ -102,6 +103,7 @@ def write_json(json_content):
 
 
 def gen_fw_cfg_icv(family, mram_size, sram_size, device_revision, featureSet):
+
     atoc_end_address, stoc_start_address = mram_size_to_address(mram_size)
     print(family)
     if family == "Ensemble" and featureSet == "Spark":
@@ -137,7 +139,8 @@ def gen_fw_cfg_icv(family, mram_size, sram_size, device_revision, featureSet):
     with open("firewall/mram.json", "r") as json_file:
         mram_json = json.load(json_file)
 
-    if family != "Predator":
+    is_eagle = family == "Ensemble" and featureSet == "Eagle"
+    if not is_eagle:
         # Delete the OSPI mirrorred region at 0x20000000
         mram_json["firewall_components"][0]["configured_regions"].pop(2)
 

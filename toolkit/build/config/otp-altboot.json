@@ -1,0 +1,43 @@
+{
+ "BOOTOPT" : {
+   "load" : "MRAM_THEN_EXTERNAL",
+   "type" : "OSPI_FLASH_8BIT_XIP_MODE"
+ },
+
+ "OTPOSPISETTINGS" :  {
+   "rx_sample_delay": 0,
+   "xip_incr_inst"  : 11,
+   "xip_wrap_inst"  : 11,
+   "aes_rxds_delay" : 11,
+
+   "ddr_drive_edge" : 1,
+   "pinmux_sel"     : 5,
+   "bus_speed_sel"  : 0,
+   "fast_read_wait_cycles" : 8,
+   "flash_size"     : 0,
+   "valid"          : 1,
+   "reset_port"     : 15,
+   "reset_pin"      : 5,
+   "spi_mode"       : 0,
+
+   "io_mode"        : 0,
+   "ddr_en"         : 0,
+   "xip_ddr_en"     : 0,
+   "inst_ddr_en"    : 0,
+   "xip_inst_ddr_en": 0,
+   "rxds_en"        : 0,
+   "rxds_vl_en"     : 0,
+   "xip_rxds_vl_en" : 0,
+   "dfs"            : 15,
+   "xip_dfs"        : 15,
+   "xip_rxds_en"    : 0,
+   "xip_instr_len"  : 2,
+   "xip_addr_len"   : 8,
+   "xip_spi_mode"   : 0,
+   "xip_hyperbus_en": 0,
+   "tx_wait_count"  : 0,
+   "reserved_0"     : 0,
+
+   "slave_select"   : 0
+ }
+}

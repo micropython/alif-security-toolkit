@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pylint: disable=invalid-name
 """
 MRAM (NVM) burning / writing utility
 Support
@@ -14,26 +15,30 @@ __status__ = "Dev"    "
 
 import os
 import sys
-import signal
 import argparse
-from utils.discover import getValues, getJlinkSN
+
+# Import local SETOOLS support
 import utils.config
-from utils.config import *
+from utils.config import *  # pylint: disable=wildcard-import,unused-wildcard-import
 from utils.user_validations import validateArgList
 
 sys.path.append("./isp")
+# pylint: disable=wrong-import-position,wrong-import-order,import-error
 from serialport import serialPort
 from serialport import COM_BAUD_RATE_MAXIMUM
-
-# import ispcommands
-from isp_core import *
-from isp_util import *
+from isp_core import isp_start, isp_stop, isp_reset
+from isp_core import isp_set_baud_rate
+from isp_core import isp_show_maintenance_mode
+from isp_core import isp_get_maintenance_status
+from isp_core import isp_mram_erase
+from isp_core import CtrlCHandler
+from isp_util import burn_mram_isp
+from isp_util import put_target_in_maintenance_mode
 import device_probe
-import pylink
-import datetime
-# from array import array
 
 #  Version                  Feature
+# 0.25.000     Revision and part# checks added (Target vs Host)
+# 0.24.000     Removed JTAG support
 # 0.23.000     Added probing to detect device stage/Part#/Rev
 # 0.22.000     Added support for MAC OS (J-Link not included yet)
 # 0.21.000     get baudrate from DBs
@@ -48,34 +53,54 @@ import datetime
 # 0.19.000     Removed JTAG access
 # 0.16.000     Addition of baud rate increase for bulk transfer
 # 0.15.000     Fixes for Block sizes and left overs
-TOOL_VERSION = "0.23.000"  # Define Version constant for each separate tool
+TOOL_VERSION = "0.25.000"  # Define Version constant for each separate tool
 
 EXIT_WITH_ERROR = 1
 
 
-def readImageList(dsFile):
+def read_image_list(ds_file):
     """
-    readImageList = read images from arm-ds command file
+    Read and extract image list from ARM-DS debug script command file.
+    Parses the debug script file to extract the image list located between
+    'args' and 'continue' markers.
+
+    Args:
+        ds_file (str): Path to the ARM-DS debug script file
+
+    Returns:
+        str: Extracted image list string from the debug script
+
+    Raises:
+        SystemExit: If file cannot be opened or if 'args'/'continue'
+                    markers are not found in the file
+
+    Example:
+        image_list = read_image_list('bin/application_package.ds')
+        read_image_list = read images from arm-ds command file
     """
     try:
-        f = open(dsFile, "r")
-        imageList = f.read()
+        f = open(ds_file, "r")
+        image_list = f.read()
         f.close()
         # search for image list
-        start = imageList.find("args")
-        end = imageList.find("continue")
+        start = image_list.find("args")
+        end = image_list.find("continue")
         if start == -1 or end == -1:
-            print("[ERROR] There is a problem with the Debug Script information")
+            print(
+                f'[ERROR] Debug Script malformed: missing "args" or '
+                f'"continue" markers in {ds_file}'
+            )
             sys.exit(EXIT_WITH_ERROR)
-        imageList = imageList[start + 5 : end]
-    except:
-        print("[ERROR] opening Debug Script file", dsFile)
+        image_list = image_list[start + 5 : end]
+    except:  # pylint: disable=bare-except
+        print(f"[ERROR] opening Debug Script file {ds_file}")
         sys.exit(EXIT_WITH_ERROR)
 
-    return imageList
+    return image_list
 
 
-def app_mram_erase(isp, args, ALIF_BASE_ADDRESS, ALIF_MRAM_SIZE):
+# pylint: disable=unused-argument
+def app_mram_erase(isp, args, alif_base_address, alif_mram_size):
     """
     app_mram_erase
     - erase the Application are of MRAM
@@ -86,8 +111,15 @@ def app_mram_erase(isp, args, ALIF_BASE_ADDRESS, ALIF_MRAM_SIZE):
     argv[3]    <pattern>  Optional pattern to erase with
     argc                  Checked before this is called
     """
+    if not args or not args.strip():
+        print("[ERROR] erase arguments cannot be empty")
+        return
+
     argv = args.split()
     argc = len(argv)
+    if argc < 3:
+        print("[ERROR] erase requires at least <address> and <size>")
+        return
 
     # nombres magiques, maybe not needed?
     address = 0x80000000
@@ -101,36 +133,59 @@ def app_mram_erase(isp, args, ALIF_BASE_ADDRESS, ALIF_MRAM_SIZE):
 
         if argc == 4:
             pattern = int(argv[3], base=16)
-        print("[INFO] %s 0x%x %d (%s)" % (argv[0], address, erase_len, erase_len_fmt))
+            print(f"[INFO] {argv[0]} 0x{address:x} {erase_len} ({erase_len_fmt})")
 
         # Validate user request for erasing is in OEM
-        if address > ALIF_BASE_ADDRESS or address + erase_len > ALIF_BASE_ADDRESS:
-            if address + erase_len > ALIF_BASE_ADDRESS:
+        if address > alif_base_address or address + erase_len > alif_base_address:
+            if address + erase_len > alif_base_address:
                 print(
-                    "[ERROR] illegal address "
-                    + hex(address + erase_len)
-                    + " ("
-                    + hex(address)
-                    + " + "
-                    + hex(erase_len)
-                    + ")"
+                    f"[ERROR] illegal address {hex(address + erase_len)} "
+                    f"({hex(address)} + {hex(erase_len)})"
                 )
             else:
-                print("[ERROR] illegal address " + hex(address))
+                print(f"[ERROR] illegal address {hex(address)}")
             return
 
         isp_mram_erase(isp, address, erase_len, pattern)
 
 
-def main():
-    if sys.version_info.major == 2:
-        print("[ERROR] You need Python 3 for this application!")
-        sys.exit(EXIT_WITH_ERROR)
+def confirm_or_exit(prompt_str):
+    """
+    Prompt user for confirmation and exit if not confirmed.
 
-    exit_code = 0
-    # Deal with Command Line
+    Args:
+        prompt_str: The prompt message to display to the user
+
+    Returns:
+        bool: True if user confirms (YES/Y), otherwise exits program
+    """
+    print(f"{prompt_str}")
+    response = input("> ").strip().upper()
+
+    if response in ["YES", "Y", "yes", "y"]:
+        return True
+
+    print("[INFO] Operation aborted\n")
+
+    sys.exit(EXIT_WITH_ERROR)
+
+
+def parse_arguments():
+    """
+    parse the command line arguments
+
+    Args:
+        none
+
+    Returns:
+        args list
+    """
     parser = argparse.ArgumentParser(
         description="NVM Burner for Application TOC Package"
+    )
+    parser.add_argument("-b", "--baudrate", help="serial port baud rate", type=int)
+    parser.add_argument(
+        "-c", "--comport", type=str, default="COM3", help="Specify COM port"
     )
     parser.add_argument(
         "-d",
@@ -139,7 +194,6 @@ def main():
         default=False,
         help="COM port discovery",
     )
-    parser.add_argument("-b", "--baudrate", help="serial port baud rate", type=int)
     parser.add_argument(
         "-e",
         "--erase",
@@ -154,8 +208,8 @@ def main():
         "--images",
         type=str,
         default="Application TOC Package",
-        help='images list to burn into NVM \
-                        ("/path/image1.bin 0x80001000 /path/image2.bin 0x80003000")',
+        help="images list to burn into NVM "
+        '("/path/image1.bin 0x80001000 /path/image2.bin 0x80003000")',
     )
     parser.add_argument(
         "-a",
@@ -164,7 +218,6 @@ def main():
         help="authenticate the image by sending its signature file",
         default=False,
     )
-    parser.add_argument("-m", "--method", type=str, help="loading method [JTAG | ISP]")
     group.add_argument(
         "-S",
         "--skip",
@@ -195,47 +248,59 @@ def main():
     )
     parser.add_argument("-v", "--verbose", help="verbosity mode", action="store_true")
 
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def setup_configuration():
+    """Load and return device configuration"""
+    load_global_config()
+    return {
+        "part_number": utils.config.DEVICE_PART_NUMBER,
+        "revision": utils.config.DEVICE_REVISION,
+        "baud_rates": utils.config.DEVICE_REV_BAUD_RATE,
+        "alif_base": utils.config.ALIF_BASE_ADDRESS,
+        "oem_base": utils.config.APP_BASE_ADDRESS,
+        "alif_size": utils.config.ALIF_MRAM_SIZE,
+        "oem_size": utils.config.APP_MRAM_SIZE,
+    }
+
+
+def validate_python_version():
+    """Ensure Python 3 is being used"""
+    if sys.version_info.major == 2:
+        print("[ERROR] You need Python 3 for this application!")
+        sys.exit(EXIT_WITH_ERROR)
+
+
+def main():
+    """
+    entry point to app-write-mram
+    """
+    validate_python_version()  # Check python version
+    exit_code = 0
+
+    # Deal with Command Line
+    args = parse_arguments()
     if args.version:
         print(TOOL_VERSION)
         sys.exit()
 
     # memory defines for Alif/OEM MRAM Addresses and Sizes
+    #    config = setup_configuration()
     load_global_config()
     DEVICE_PART_NUMBER = utils.config.DEVICE_PART_NUMBER
     DEVICE_REVISION = utils.config.DEVICE_REVISION
     DEVICE_REV_BAUD_RATE = utils.config.DEVICE_REV_BAUD_RATE
-    MRAM_BASE_ADDRESS = utils.config.MRAM_BASE_ADDRESS
     ALIF_BASE_ADDRESS = utils.config.ALIF_BASE_ADDRESS
     OEM_BASE_ADDRESS = utils.config.APP_BASE_ADDRESS
-    MRAM_SIZE = utils.config.MRAM_SIZE
     ALIF_MRAM_SIZE = utils.config.ALIF_MRAM_SIZE
     OEM_MRAM_SIZE = utils.config.APP_MRAM_SIZE
-    MRAM_BURN_INTERFACE = utils.config.MRAM_BURN_INTERFACE
-    JTAG_ADAPTER = utils.config.JTAG_ADAPTER
 
     os.system("")  # Help MS-DOS window with ESC sequences
 
     print("Writing MRAM with parameters:")
-    print("Device Part# " + DEVICE_PART_NUMBER + " - Rev: " + DEVICE_REVISION)
-    print("- Available MRAM: " + str(OEM_MRAM_SIZE) + " bytes")
-
-    #    baud_rate = args.baudrate
-    #    if DEVICE_REVISION == 'A0':
-    #        """
-    #            For REV_A0 we need to change the default used by ALL other devices
-    #        """
-    #        default_baud_rate = COM_BAUD_RATE_REV_A0
-    #        if baud_rate == COM_BAUD_RATE_DEFAULT:
-    #            baud_rate = default_baud_rate
-    #    else:
-    #        default_baud_rate = COM_BAUD_RATE_DEFAULT
-    #        baud_rate = args.baudrate
-
-    #    if baud_rate != default_baud_rate:
-    #        dynamic_baud_rate_switch = False
-    #    else:
-    #        dynamic_baud_rate_switch = args.switch
+    print(f"Device Part# {DEVICE_PART_NUMBER} - Rev: {DEVICE_REVISION}")
+    print(f"- Available MRAM: {OEM_MRAM_SIZE:,} bytes")
 
     baud_rate = DEVICE_REV_BAUD_RATE[DEVICE_REVISION]
     if args.baudrate is not None:
@@ -243,169 +308,115 @@ def main():
 
     dynamic_baud_rate_switch = args.switch
 
-    argList = ""
+    arg_list = ""
     action = "Burning: "
-    method = None
-
-    if args.method == None:
-        method = MRAM_BURN_INTERFACE
-    elif args.method.upper() == "ISP":
-        method = "isp"
-    elif args.method.upper() == "JTAG":
-        method = "jtag"
-    else:
-        print("[ERROR] Unknown connection method", args.method)
-        sys.exit(EXIT_WITH_ERROR)
+    method = "isp"
 
     if args.erase:
         action = "Erasing: "
-        argList = "erase "
+        arg_list = "erase "
         if args.erase.upper() == "APP":
-            argList += hex(OEM_BASE_ADDRESS) + " " + hex(OEM_MRAM_SIZE)
+            arg_list += hex(OEM_BASE_ADDRESS) + " " + hex(OEM_MRAM_SIZE)
         else:
             if args.erase.strip() == "":
                 print("[ERROR] erase arguments are empty")
                 sys.exit(EXIT_WITH_ERROR)
-            argList += args.erase
+            arg_list += args.erase
     elif args.images != "Application TOC Package":
-        argList = args.images
+        arg_list = args.images
     else:
         dsFile = "bin/application_package.ds"
-        argList = readImageList(dsFile)
+        arg_list = read_image_list(dsFile)
 
     if args.skip:
-        idx = argList.find("../build/AppTocPackage.bin 0x")
-        argList = argList[idx : idx + 37]
+        idx = arg_list.find("../build/AppTocPackage.bin 0x")
+        arg_list = arg_list[idx : idx + 37]
 
     # validate all parameters
-    argList = validateArgList(action, argList.strip(), args.pad)
+    arg_list = validateArgList(action, arg_list.strip(), args.pad)
 
-    if sys.platform == "linux" or sys.platform == "darwin":
-        argList = argList.replace("../", "")
+    if sys.platform in ["linux", "darwin"]:
+        arg_list = arg_list.replace("../", "")
 
-    print("[INFO]", action + argList)
+    print("[INFO]", action + arg_list)
 
     if method == "jtag" and not args.erase:  # erase via jtag not yet supported!
-        jlinkSN = getJlinkSN()
-        if jlinkSN == -1:
-            print("J-Link device not found!")
-            sys.exit(EXIT_WITH_ERROR)
-
-        print("J-Link SN: " + jlinkSN)
-
-        jlink = pylink.JLink()
-        jlink.open(serial_no=int(jlinkSN))
-        print(jlink.product_name)
-        if not jlink.opened():
-            print("Error opening J-Link")
-            sys.exit(EXIT_WITH_ERROR)
-
-        if not jlink.connected():
-            print("Error connecting J-Link")
-            sys.exit(EXIT_WITH_ERROR)
-
-        print("about to connect to M0+..")
-        jlink.connect("CORTEX-M0+", verbose=True)
-        # jlink.connect('AC302F8A82562_HE', verbose=True)
-        if not jlink.target_connected():
-            print("Error connecting target")
-            print("Please, power-cycle the board")
-            sys.exit(EXIT_WITH_ERROR)
-
-        argParams = argList.strip().split(" ")
-        lenParams = len(argParams)
-        i = 0
-        while i < lenParams:
-            f = argParams[i][3:]
-            if sys.platform == "linux":
-                f = argParams[i][:]
-
-            print("File name: " + f)
-            file_size = os.path.getsize(f)
-            print("File Size is :", file_size, "bytes")
-            print("MRAM starting address: " + argParams[i + 1])
-            addr = globalToLocalAddress(argParams[i + 1])
-            print("Writing the file to MRAM...")
-            # read the file
-            f = open(f, "rb")
-            # fileData = array("I")
-            # fileData.fromfile(f, int(file_size/4))
-            fileData = list(f.read(file_size))
-            f.close()
-
-            # write the data to MRAM
-            t1 = datetime.datetime.now()
-            # jlink.memory_write32(int(addr, 16), fileData)
-            jlink.memory_write8(int(addr, 16), fileData)
-            t2 = datetime.datetime.now()
-            print("Done in " + str(t2 - t1))
-            i += 2
-
-        # jlink.reset()  # the reset causes an issue and the board will need to power cycle...
-
+        print("[ERROR] jtag is not supported")
         return  # end jlink tests
 
     if method == "jtag" and args.erase:  # erase via jtag not yet supported!
         print("[INFO] Erase is only supported via ISP")
 
     dynamic_string = "Enabled" if dynamic_baud_rate_switch else "Disabled"
-    print("[INFO] baud rate ", baud_rate)
+    print(f"[INFO] baud rate {baud_rate} ")
     print("[INFO] dynamic baud rate change ", dynamic_string)
 
     handler = CtrlCHandler()
     isp = serialPort(baud_rate)  # Serial dabbling open up port.
 
-    if args.discover:  # discover the COM ports if requested
+    comport_override = False
+    if args.comport != "COM3":
+        isp.setPort(args.comport)
+        comport_override = True
+    isp.setVerbose(args.verbose)
+    if args.discover and not comport_override:  # discover the COM ports if requested
+        print("Discover")
         isp.discoverSerialPorts()
 
     errorCode = isp.openSerial()
     if errorCode is False:
-        print("[ERROR] isp openSerial failed for %s" % isp.getPort())
+        print(f"[ERROR] isp openSerial failed for {isp.getPort()}")
         sys.exit(EXIT_WITH_ERROR)
 
-    print("[INFO] %s open Serial port success" % isp.getPort())
+    print(f"[INFO] {isp.getPort()} open Serial port success")
 
     isp.setBaudRate(baud_rate)
-    isp.setVerbose(args.verbose)
 
     # be sure device is not in SEROM Recovery Mode
     device = device_probe.device_get_attributes(isp)
     if device.stage != device_probe.STAGE_SERAM:
         print(
-            "[ERROR] The device is in RECOVERY MODE! Please use Recovery option in Maintenance Tool to recover the device!"
+            "[ERROR] The device is in RECOVERY MODE! "
+            "Please use Recovery option in Maintenance Tool to recover the device!"
         )
         sys.exit(EXIT_WITH_ERROR)
 
+    # Probe the target device and check it matches the setings on the Host
     print("[INFO] Detected Device:")
-    partDetected = device.part_number
-    print("Part# " + partDetected + " - Rev: " + device.revision)
+    part_detected = device.part_number
+    print(f"Part# {part_detected} - Rev:  {device.revision}")
 
-    partDescription = getPartDescription(partDetected)
-
-    if partDescription != DEVICE_PART_NUMBER:
-        print(
-            "[WARN] ************ Part# detected is different than the one configured in tools-config tool!"
+    part_description = getPartDescription(part_detected)
+    if part_description != DEVICE_PART_NUMBER:
+        confirm_or_exit(
+            f"[ERROR] ************ Configuration mismatch detected!\n"
+            f"  Expected: {DEVICE_PART_NUMBER}\n"
+            f"  Detected: {part_description}\n"
+            f"Continue with operation [y/n]?"
         )
 
     if device.revision != DEVICE_REVISION:
-        print(
-            "[WARN] ************ Part Revision detected is different than the one configured in tools-config tool!"
+        confirm_or_exit(
+            f"[ERROR] ************ Part Revision mismatch detected!\n"
+            f"  Expected: {DEVICE_REVISION}\n"
+            f"  Detected: {device.revision}\n"
+            f"Continue with operation [y/n]?"
         )
 
     if not args.no_reset:
         put_target_in_maintenance_mode(isp, baud_rate, args.verbose)
 
-    if sys.platform == "linux" or sys.platform == "darwin":
-        argList = argList.replace("\\", "/")
+    if sys.platform in ["linux", "darwin"]:
+        arg_list = arg_list.replace("\\", "/")
     else:
-        argList = argList.replace("/", "\\")
+        arg_list = arg_list.replace("/", "\\")
 
-    items = argList.split(" ")
+    items = arg_list.split(" ")
 
     isp_start(isp)  # Start ISP Sequence
 
     if args.erase:
-        app_mram_erase(isp, argList, ALIF_BASE_ADDRESS, ALIF_MRAM_SIZE)
+        app_mram_erase(isp, arg_list, ALIF_BASE_ADDRESS, ALIF_MRAM_SIZE)
     else:
         if dynamic_baud_rate_switch:
             isp_set_baud_rate(isp, COM_BAUD_RATE_MAXIMUM)  # Jack up Baud rate
@@ -425,7 +436,7 @@ def main():
                 burn_mram_isp(
                     isp, handler, fileName, address, args.verbose, args.auth_image
                 )
-                == False
+                is False
             ):
                 exit_code = EXIT_WITH_ERROR
                 break

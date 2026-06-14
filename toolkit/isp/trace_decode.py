@@ -1,16 +1,27 @@
+#!/usr/bin/python3
 """
 trace buffer decoder (SEROM and SERAM)
 
- __author__ = "ronyett"
- __copyright__ = "ALIF Seminconductor"
- __version__ = "0.02.000"
- __status__ = "Dev"    "
+  __author__ = "ronyett"
+  __copyright__ = "ALIF Seminconductor"
+  __version__ = "0.03.016" # Reset cumulative time for SERAM_RESET_HANDLER
+  __status__ = "Dev"
 """
 #!/usr/bin/env python3
-# pylint: disable=invalid-name,superfluous-parens,anomalous-unicode-escape-in-string
+# pylint: disable=invalid-name,superfluous-parens,anomalous-unicode-escape-in-string, too-many-locals, too-many-statements, too-many-branches, line-too-long, too-many-arguments
+
+# Import definitions from trace_definitions.py
+from trace_definitions import *
+
+# --- Debug Configuration ---
+DEBUG_PRINT_ENABLE = False  # Set to True to enable detailed debug prints
 
 TRACE_BASE_ADDRESS = 0
-NUMBER_OF_TRACES = 472  # 512 # SERAM Size = 0x200, 512 Words, 2K bytes
+# NUMBER_OF_TRACES represents the maximum design capacity of the hardware trace buffer (in words).
+# The actual size of the trace data in a dump might be different and is determined dynamically.
+NUMBER_OF_TRACES = (
+    472  # Or 512; SERAM Size = 0x200, 512 Words, 2K bytes (this is WORD capacity)
+)
 
 # Trace field encoding data
 FLAG_MASK_SHIFT = 0
@@ -31,785 +42,586 @@ TRACE_FLAG_TIMESTAMP = 0x03  # Next entry is 32 bit TimeStamp
 
 TRACE_BUFFER_END_MARKER = 0xEEEEEEEE
 
-#
-# SEROM Trace Flags
-#
-TRACE_BEGIN_RESET = 0x1
-TRACE_SE_FIREWALL = 0x2
-TRACE_HOST_FIREWALL = 0x3
-TRACE_FIREWALL_CTRL_READY = 0x4
-TRACE_FIREWALLS_INITIALIZED = 0x5
-TRACE_LCS_INITIALIZATIONS = 0x6
-TRACE_LCS_CM = 0x7  # lcs=0
-TRACE_LCS_DM = 0x8  # lcs=1
-TRACE_LCS_UNKNOWN_1 = 0x9  # lcs=2
-TRACE_LCS_UNKNOWN_2 = 0xA  # lcs=3
-TRACE_LCS_UNKNOWN_3 = 0xB  # lcs=4
-TRACE_LCS_SE = 0xC  # lcs=5
-TRACE_LCS_UNKNOWN_4 = 0xD  # lcs=6
-TRACE_LCS_RMA = 0xE  # lcs=7
-TRACE_BEGIN_MAIN = 0xF
-TRACE_FIND_STOC = 0x10
-TRACE_LOCATE_CERT_CHAIN = 0x11
-TRACE_RAW_BYPASS_CHECK = 0x12
-TRACE_RAW_BYPASS = 0x13
-TRACE_VERIFY_CERT_CHAIN = 0x14
-TRACE_SRAM_RETAINED = 0x15
-TRACE_SECURE_LCS_BOOT = 0x16
-TRACE_WAKE_UP_BROWNOUT = 0x17
-TRACE_START_CM55_HE = 0x18
-TRACE_CERT_CHAIN_VERIFY_START = 0x19
-TRACE_EACH_CERT_VERIFY = 0x1A
-TRACE_CERT_CHAIN_VERIFY_END = 0x1B
-TRACE_SERAM_JUMP = 0x1C
-TRACE_PROCESS_ERROR = 0x1D
-TRACE_CERTIFICATE_ERROR = 0x1E
-TRACE_CM55_HE_FORCE_COLD_BOOT = 0x1F
 
-TRACE_CLEAR_FIRST_BOOT_MRAM_WRITE_FAIL = 0x20
-TRACE_MARK_BANK_NOT_VALID_MRAM_WRITE_FAIL = 0x21
-TRACE_SET_IMAGE_BOOTED_MRAM_WRITE_FAIL = 0x22
-TRACE_UPDATE_ERROR_CODES_MRAM_WRITE_FAIL = 0x23
-TRACE_UPDATE_BOOTFLAGS_CHECKSUM_MRAM_WRITE_FAIL = 0x24
-TRACE_BANK_A_NOT_BOOTABLE = 0x25
-TRACE_BANK_B_NOT_BOOTABLE = 0x26
-TRACE_NEWER_BANK_A = 0x27
-TRACE_NEWER_BANK_B = 0x28
-TRACE_TOC1_SERAM_OFFSET_INVALID = 0x29
-TRACE_TOC2_SERAM_OFFSET_INVALID = 0x2A
-TRACE_TOC1_EXTENSION_HEADER_INVALID = 0x2B
-TRACE_TOC2_EXTENSION_HEADER_INVALID = 0x2C
-TRACE_TOC1_BOOT_FLAGS_CHECKSUM_INVALID = 0x2D
-TRACE_TOC2_BOOT_FLAGS_CHECKSUM_INVALID = 0x2E
-TRACE_BANK_A_BOOT_FAILED = 0x2F
-TRACE_BANK_B_BOOT_FAILED = 0x30
-TRACE_WAKE_UP_RESET = 0x31
-TRACE_LOAD_MSP_ADDRESS = 0x32
-TRACE_LOAD_JUMP_ADDRESS = 0x33
-TRACE_INVALID_TOC_OFFSET = 0x34
-TRACE_CM55_HE_CPU_WAIT_RELEASE = 0x35
-TRACE_PROCESS_ERROR_EXTENDED = 0x36
-TRACE_FAST_BOOT_FIREWALL_PROTECT = 0x37
-TRACE_BEGIN_CGU_CLOCK_CONFIGURATION = 0x38
-TRACE_CGU_CLOCKS_CONFIGURED = 0x39
-TRACE_MRAM_RESET_ERROR_BYPASS = 0x3A
-TRACE_MRAM_SET_ERROR_BYPASS = 0x3B
-TRACE_BAD_SERAM_JUMP_ADDRESS = 0x3C
-TRACE_BOOT_LOADER_JUMP_RETURNED = 0x3D
-TRACE_TURN_ON_SYSTEM_POWER = 0x3E
-TRACE_SERAM_RETENTION_PATTERN = 0x3F
-
-#
-# SERAM Trace Flags
-#
-TRACE_FIREWALL_STATIC_CONFIG_BEGIN = 0x40
-TRACE_FIREWALL_STATIC_CONFIG_END = 0x41
-TRACE_PLL_INIT_BEGIN = 0x42
-TRACE_PLL_INIT_END = 0x43
-TRACE_MAINTENANCE_MODE_DETECT_BEGIN = 0x44
-TRACE_MAINTENANCE_MODE_DETECT_END = 0x45
-TRACE_CC_LIB_INIT_BEGIN = 0x46
-TRACE_CC_LIB_INIT_END = 0x47
-TRACE_M55_HE_TCM_INIT_BEGIN = 0x48
-TRACE_M55_HE_TCM_INIT_END = 0x49
-TRACE_ATOC_MISC_BEGIN = 0x4A
-TRACE_ATOC_MISC_END = 0x4B
-TRACE_STOC_DEVICE_BEGIN = 0x4C
-TRACE_STOC_DEVICE_END = 0x4D
-TRACE_STOC_PART_NUMBER = 0x4E
-TRACE_START_MAIN = 0x4F
-
-TRACE_STOC_PROCESS_BEGIN = 0x50
-TRACE_ATOC_PROCESS_BEGIN = 0x51
-TRACE_TOC_PROCESS_END = 0x52
-TRACE_TOC_PRINT_BEGIN = 0x53
-TRACE_TOC_PRINT_END = 0x54
-TRACE_BANK_MAINTENANCE_BEGIN = 0x55
-TRACE_BANK_MAINTENANCE_END = 0x56
-TRACE_CPU_RELEASE = 0x57
-TRACE_CPU_BOOT = 0x58
-TRACE_WAKE_UP = 0x59
-TRACE_COLD_BOOT = 0x5A
-TRACE_M55_FASTBOOT_SERAM = 0x5B
-TRACE_M55_TCM_RETAINED = 0x5C
-TRACE_M55_VTOR_SENTINEL = 0x5D
-TRACE_STOP_MODE_ENABLE_BEGIN = 0x5E
-TRACE_1_MAIN = 0x5F
-
-TRACE_RTOS_WFI_BEGIN = 0x60
-TRACE_RTOS_WFI_END = 0x61
-TRACE_2_MAIN = 0x62
-TRACE_3_MAIN = 0x63
-TRACE_ENTER_MAINTENANCE_MODE = 0x64
-TRACE_DCU_CONFIG_BEGIN = 0x65
-TRACE_DCU_CONFIG_END = 0x66
-TRACE_RECEIVE_MHU = 0x67
-TRACE_PROCESS_MHU = 0x68
-TRACE_FINISH_MHU = 0x69
-TRACE_SERAM_TO_M55_HP = 0x6A
-TRACE_SERAM_TO_M55_HE = 0x6B
-TRACE_M55_HP_TO_SERAM = 0x6C
-TRACE_M55_HE_TO_SERAM = 0x6D
-TRACE_BEGIN_TRIMMING = 0x6E
-TRACE_FINISH_TRIMMING = 0x6F
-
-TRACE_BEGIN_SERAM_BANK_COPY = 0x70
-TRACE_END_SERAM_BANK_COPY = 0x71
-TRACE_M55_FASTBOOT_SERAM_XIP = 0x72
-TRACE_WARM_BOOT = 0x73
-TRACE_A32_0_RELEASED = 0x74
-TRACE_A32_1_RELEASED = 0x75
-TRACE_M55_HP_RELEASED = 0x76
-TRACE_M55_HE_RELEASED = 0x77
-TRACE_MODEM_RELEASED = 0x78
-TRACE_GNSS_RELEASED = 0x79
-TRACE_DSP_RELEASED = 0x7A
-TRACE_VBAT_ANA_REG2 = 0x7B
-TRACE_VBAT_ANA_REG3 = 0x7C
-TRACE_DCDC_REG1 = 0x7D
-TRACE_COMP_REG2 = 0x7E
-TRACE_NO_TRIM_VALUES_SPECIFIED = 0x7F
-
-TRACE_SERAM_BOOT_COMPLETE = 0x80
-TRACE_SERAM_BOOT_ERROR = 0x81
-TRACE_SERAM_OS_ERROR = 0x82
-TRACE_VBAT_ANA_REG1 = 0x83
-TRACE_SOC_RESET = 0x84
-TRACE_EWIC_ENABLE = 0x85
-TRACE_EWIC_STATUS = 0x86
-TRACE_SOC_ID = 0x87
-TRACE_OVERRIDE_SOC_ID = 0x88
-TRACE_ACTIVE_SW_VERSION = 0x89
-TRACE_TOGGLE_EXTSYS0_WAKEUP = 0x8A
-TRACE_TOGGLE_EXTSYS1_WAKEUP = 0x8B
-TRACE_MRAM_WRITE_FAILURE = 0x8C
-TRACE_MRAM_CONTROLLER_ERROR = 0x8D
-TRACE_SERAM_RESET_HANDLER = 0x8E
-TRACE_FAST_BOOT = 0x8B
-
-TRACE_BANK_A_VALID = 0x90
-TRACE_BANK_B_VALID = 0x91
-TRACE_BANK_A_FIRST_BOOT = 0x92
-TRACE_BANK_B_FIRST_BOOT = 0x93
-TRACE_BANK_A_INVALID = 0x94
-TRACE_BANK_B_INVALID = 0x95
-TRACE_BOOT_BANK_A = 0x96
-TRACE_BOOT_BANK_B = 0x97
-TRACE_BANK_A_BOOTED = 0x98
-TRACE_BANK_B_BOOTED = 0x99
-TRACE_PARTIAL_TRIMMING = 0x9A
-TRACE_FULL_TRIMMING = 0x9B
-TRACE_TRIM55 = 0x9C
-TRACE_TRIM56 = 0x9D
-TRACE_TRIM57 = 0x9E
-TRACE_TRIM58 = 0x9F
-
-TRACE_RISC_V_RELEASED = 0xA0
-TRACE_RISC_V_EXTSYS0_RESET = 0xA1
-TRACE_RISC_V_EXTSYS0_SHUTDOWN = 0xA2
-TRACE_RISC_V_EXTSYS0_EXTSYS1_WAKEUP = 0xA3
-TRACE_RISC_V_EXTSYS0_WRITE_WAKEUP_SENTINEL = 0xA4
-TRACE_BISR_OTP_CHECK = 0xA5
-TRACE_BISR_NOT_NEEDED = 0xA6
-TRACE_BISR_ENABLE = 0xA7
-TRACE_BISR_FINISHED = 0xA8
-TRACE_BISR_REPAIR_FAILED = 0xA9
-TRACE_RESUME_FROM_STANDBY = 0xAA
-TRACE_BOOT_TIME_US = 0xAB
-TRACE_TURN_OFF_SE_POWER = 0xAC
-TRACE_TURN_ON_HOST_POWER = 0xAD
-TRACE_HARD_FAULT = 0xAE
-TRACE_HARD_FAULT_PC = 0xAF
-
-TRACE_STOP_ENABLE_END = 0xB0
-TRACE_OFF_HANDLER = 0xB1
-TRACE_STOP_VOTES_OK = 0xB2
-TRACE_SE_PPU_INTR = 0xB3
-TRACE_ES0_PPU_INTR = 0xB4
-TRACE_ES1_PPU_INTR = 0xB5
-TRACE_STOP_BEGIN = 0xB6
-TRACE_STOP_0 = 0xB7
-TRACE_STOP_1 = 0xB8
-TRACE_STOP_2 = 0xB9
-TRACE_STOP_3 = 0xBA
-TRACE_STOP_4 = 0xBB
-TRACE_STOP_5 = 0xBC
-TRACE_STOP_6 = 0xBD
-TRACE_STOP_7 = 0xBE
-TRACE_STOP_8 = 0xBF
-
-TRACE_STOP_9 = 0xD0
-TRACE_STOP_10 = 0xD1
-TRACE_STOP_11 = 0xD2
-TRACE_STOP_12 = 0xD3
-TRACE_STOP_13 = 0xD4
-TRACE_STOP_14 = 0xD5
-TRACE_STOP_15 = 0xD6
-
-TRACE_PINMUX = 0xD7
-TRACE_BOOT_INIT = 0xD8
-TRACE_POWER_INIT = 0xD9
-TRACE_SES_INIT = 0xDA
-TRACE_MRAM_CFG = 0xDB
-TRACE_MRAM_PWR_EN = 0xDC
-TRACE_HARD_FAULT_LR = 0xDD
-
-# Marker trace translation
-marker_lookup = {
-    TRACE_BEGIN_RESET: "Begin Reset_Handler",
-    TRACE_SE_FIREWALL: "SE Firewall configuration",
-    TRACE_HOST_FIREWALL: "HOST Firewall configuration",
-    TRACE_FIREWALL_CTRL_READY: "Firewall controller ready",
-    TRACE_FIREWALLS_INITIALIZED: "Firewall initialized",
-    TRACE_LCS_INITIALIZATIONS: "Begin CC312 initializations",
-    TRACE_LCS_CM: "LCS = 0 -> CM",
-    TRACE_LCS_DM: "LCS = 1 -> DM",
-    TRACE_LCS_UNKNOWN_1: "LCS = 2 -> UNKNOWN_1",
-    TRACE_LCS_UNKNOWN_2: "LCS = 3 -> UNKNOWN_2",
-    TRACE_LCS_UNKNOWN_3: "LCS = 4 -> UNKNOWN_3",
-    TRACE_LCS_SE: "LCS = SE",
-    TRACE_LCS_UNKNOWN_4: "LCS = 6 -> UNKNOWN_4",
-    TRACE_LCS_RMA: "LCS = RMA",
-    TRACE_BEGIN_MAIN: "Begin Main",
-    TRACE_FIND_STOC: "Find STOC in MRAM",
-    TRACE_LOCATE_CERT_CHAIN: "Locate certificate chain",
-    TRACE_RAW_BYPASS_CHECK: "Raw Bypass check",
-    TRACE_RAW_BYPASS: "Raw Bypass method invoked",
-    TRACE_VERIFY_CERT_CHAIN: "Verify certificate chain",
-    TRACE_SRAM_RETAINED: "SRAM retained",
-    TRACE_SECURE_LCS_BOOT: "SECURE LCS Cold Boot",
-    TRACE_WAKE_UP_BROWNOUT: "Brownout detected",
-    TRACE_START_CM55_HE: "Fast Boot Start CM55_HE",
-    TRACE_CERT_CHAIN_VERIFY_START: "Begin certificate chain verification",
-    TRACE_EACH_CERT_VERIFY: "Verify each certificate",
-    TRACE_CERT_CHAIN_VERIFY_END: "End certificate chain verification",
-    TRACE_SERAM_JUMP: "Jump to SERAM",
-    TRACE_PROCESS_ERROR: "SEROM Error Detected",
-    TRACE_CERTIFICATE_ERROR: "Certificate Processing Error Detected",
-    TRACE_CM55_HE_FORCE_COLD_BOOT: "Force CM55-HE cold boot",
-    TRACE_CLEAR_FIRST_BOOT_MRAM_WRITE_FAIL: "Clear boot flag MRAM write failed",
-    TRACE_MARK_BANK_NOT_VALID_MRAM_WRITE_FAIL: "Mark Bank not valid MRAM write failed",
-    TRACE_SET_IMAGE_BOOTED_MRAM_WRITE_FAIL: "Set Image Booted Flag in MRAM failed",
-    TRACE_UPDATE_ERROR_CODES_MRAM_WRITE_FAIL: "Update Error Codes in MRAM failed",
-    TRACE_UPDATE_BOOTFLAGS_CHECKSUM_MRAM_WRITE_FAIL: "Update Boot Flags Checksum in MRAM failed",
-    TRACE_BANK_A_NOT_BOOTABLE: "Bank A not bootable",
-    TRACE_BANK_B_NOT_BOOTABLE: "Bank B not bootable",
-    TRACE_NEWER_BANK_A: "Bank A is newer",
-    TRACE_NEWER_BANK_B: "Bank B is newer",
-    TRACE_TOC1_SERAM_OFFSET_INVALID: "TOC1 SERAM Offset invalid",
-    TRACE_TOC2_SERAM_OFFSET_INVALID: "TOC2 SERAM Offset invalid",
-    TRACE_TOC1_EXTENSION_HEADER_INVALID: "TOC1 Extension Header invalid",
-    TRACE_TOC2_EXTENSION_HEADER_INVALID: "TOC2 Extension Header invalid",
-    TRACE_TOC1_BOOT_FLAGS_CHECKSUM_INVALID: "TOC1 Boot Flags Checksum invalid",
-    TRACE_TOC2_BOOT_FLAGS_CHECKSUM_INVALID: "TOC2 Boot Flags Checksum invalid",
-    TRACE_BANK_A_BOOT_FAILED: "BANK A boot failed",
-    TRACE_BANK_B_BOOT_FAILED: "BANK B boot failed",
-    TRACE_WAKE_UP_RESET: "SOC reset was triggered",
-    TRACE_LOAD_MSP_ADDRESS: "Load MSP Address",
-    TRACE_LOAD_JUMP_ADDRESS: "Load JUMP Address",
-    TRACE_INVALID_TOC_OFFSET: "Invalid Alif TOC offset specified",
-    TRACE_CM55_HE_CPU_WAIT_RELEASE: "CM55 HE CPU wait release",
-    TRACE_PROCESS_ERROR_EXTENDED: "SEROM Error Detected - extended error",
-    TRACE_FAST_BOOT_FIREWALL_PROTECT: "FAST BOOT configure firewall protection",
-    TRACE_BEGIN_CGU_CLOCK_CONFIGURATION: "Begin CGU clock configuration",
-    TRACE_CGU_CLOCKS_CONFIGURED: "CGU clock configuration complete",
-    TRACE_MRAM_RESET_ERROR_BYPASS: "Enable MRAM ECC Error Interrupts",
-    TRACE_MRAM_SET_ERROR_BYPASS: "Disable MRAM ECC Error Interrupts",
-    TRACE_BAD_SERAM_JUMP_ADDRESS: "Bad SERAM Jump Address",
-    TRACE_BOOT_LOADER_JUMP_RETURNED: "Boot Loader Jump Returned",
-    TRACE_TURN_ON_SYSTEM_POWER: "Turn On SE System POWER Register",
-    TRACE_SERAM_RETENTION_PATTERN: "SERAM retention pattern detected",
-    TRACE_FIREWALL_STATIC_CONFIG_BEGIN: "Firewall Static BEGIN",
-    TRACE_FIREWALL_STATIC_CONFIG_END: "Firewall Static END  ",
-    TRACE_PLL_INIT_BEGIN: "PLL BEGIN",
-    TRACE_PLL_INIT_END: "PLL END",
-    TRACE_MAINTENANCE_MODE_DETECT_BEGIN: "Maintenance Detection BEGIN",
-    TRACE_MAINTENANCE_MODE_DETECT_END: "Maintenance Detection END",
-    TRACE_CC_LIB_INIT_BEGIN: "CC Lib BEGIN",
-    TRACE_CC_LIB_INIT_END: "CC Lib END",
-    TRACE_M55_HE_TCM_INIT_BEGIN: "M55 HE TCM Init BEGIN",
-    TRACE_M55_HE_TCM_INIT_END: "M55 HE TCM Init END",
-    TRACE_ATOC_MISC_BEGIN: "ATOC MISC BEGIN",
-    TRACE_ATOC_MISC_END: "ATOC MISC END",
-    TRACE_STOC_DEVICE_BEGIN: "STOC DEVICE BEGIN",
-    TRACE_STOC_DEVICE_END: "STOC DEVICE END",
-    TRACE_STOC_PART_NUMBER: "STOC Part#",
-    TRACE_START_MAIN: "main() start",
-    TRACE_STOC_PROCESS_BEGIN: "STOC Process BEGIN",
-    TRACE_ATOC_PROCESS_BEGIN: "ATOC Process BEGIN",
-    TRACE_TOC_PROCESS_END: "TOC Process END",
-    TRACE_TOC_PRINT_BEGIN: "TOC Print BEGIN",
-    TRACE_TOC_PRINT_END: "TOC Print END",
-    TRACE_BANK_MAINTENANCE_BEGIN: "BANK Maintenance BEGIN",
-    TRACE_BANK_MAINTENANCE_END: "BANK Maintenance END",
-    TRACE_CPU_RELEASE: "CPU release",
-    TRACE_CPU_BOOT: "CPU boot",
-    TRACE_WAKE_UP: "Wake up",
-    TRACE_COLD_BOOT: "Cold boot",
-    TRACE_M55_FASTBOOT_SERAM: "M55 fast boot by SERAM",
-    TRACE_M55_TCM_RETAINED: "M55 TCM was retained",
-    TRACE_M55_VTOR_SENTINEL: "M55 VTOR SENTINEL detected",
-    TRACE_STOP_MODE_ENABLE_BEGIN: "Stop mode enable BEGIN",
-    TRACE_1_MAIN: "main() 1",
-    TRACE_RTOS_WFI_BEGIN: "RTOS Wfi BEGIN",
-    TRACE_RTOS_WFI_END: "RTOS Wfi END",
-    TRACE_2_MAIN: "main() 2",
-    TRACE_3_MAIN: "main() 3",
-    TRACE_ENTER_MAINTENANCE_MODE: "Enter maintenance mode",
-    TRACE_DCU_CONFIG_BEGIN: "Begin DCU configuration",
-    TRACE_DCU_CONFIG_END: "Finish DCU configuration",
-    TRACE_RECEIVE_MHU: "Receive MHU",
-    TRACE_PROCESS_MHU: "Process MHU",
-    TRACE_FINISH_MHU: "Finish MHU",
-    TRACE_SERAM_TO_M55_HP: "SERAM to M55_HP MHU",
-    TRACE_SERAM_TO_M55_HE: "SERAM to M55_HE MHU",
-    TRACE_M55_HP_TO_SERAM: "M55_HP to SERAM MHU",
-    TRACE_M55_HE_TO_SERAM: "M55_HE to SERAM MHU",
-    TRACE_BEGIN_TRIMMING: "Begin installing analog trim values",
-    TRACE_FINISH_TRIMMING: "Finish installing analog trim values",
-    TRACE_BEGIN_SERAM_BANK_COPY: "SERAM bank copy BEGIN",
-    TRACE_END_SERAM_BANK_COPY: "SERAM bank copy END",
-    TRACE_M55_FASTBOOT_SERAM_XIP: "M55 XIP fast boot by SERAM",
-    TRACE_WARM_BOOT: "Warm boot",
-    TRACE_A32_0_RELEASED: "A32_0 released",
-    TRACE_A32_1_RELEASED: "A32_1 released",
-    TRACE_M55_HP_RELEASED: "M55_HP released",
-    TRACE_M55_HE_RELEASED: "M55_HE released",
-    TRACE_MODEM_RELEASED: "M55 MODEM released",
-    TRACE_GNSS_RELEASED: "M55 GNSS released",
-    TRACE_DSP_RELEASED: "DSP released",
-    TRACE_VBAT_ANA_REG1: "Program VBAT_ANA_REG1",
-    TRACE_VBAT_ANA_REG2: "Program VBAT_ANA_REG2",
-    TRACE_VBAT_ANA_REG3: "Program VBAT_ANA_REG3",
-    TRACE_DCDC_REG1: "Program DCDC_REG1",
-    TRACE_COMP_REG2: "Program COMP_REG2",
-    TRACE_NO_TRIM_VALUES_SPECIFIED: "No trim values specified",
-    TRACE_SERAM_BOOT_COMPLETE: "SERAM boot complete",
-    TRACE_SERAM_BOOT_ERROR: "SERAM boot error",
-    TRACE_SERAM_OS_ERROR: "SERAM operating system boot error",
-    TRACE_BANK_A_VALID: "BANK A is VALID",
-    TRACE_BANK_B_VALID: "BANK B is VALID",
-    TRACE_BANK_A_FIRST_BOOT: "BANK A is FIRST BOOT",
-    TRACE_BANK_B_FIRST_BOOT: "BANK B is FIRST BOOT",
-    TRACE_BANK_A_INVALID: "BANK A is INVALID",
-    TRACE_BANK_B_INVALID: "BANK B is INVALID",
-    TRACE_BOOT_BANK_A: "BOOT BANK A",
-    TRACE_BOOT_BANK_B: "BOOT BANK B",
-    TRACE_BANK_A_BOOTED: "BANK A BOOTED",
-    TRACE_BANK_B_BOOTED: "BANK B BOOTED",
-    TRACE_FULL_TRIMMING: "Full trim specified",
-    TRACE_TRIM55: "Trim OTP word 0x55",
-    TRACE_TRIM56: "Trim OTP word 0x56",
-    TRACE_TRIM57: "Trim OTP word 0x57",
-    TRACE_TRIM58: "Trim OTP word 0x58",
-    TRACE_SOC_RESET: "SOC Reset Cold Boot",
-    TRACE_EWIC_ENABLE: "Configure EWIC Enable",
-    TRACE_EWIC_STATUS: "Read EWIC Status",
-    TRACE_SOC_ID: "Read SOC_ID",
-    TRACE_OVERRIDE_SOC_ID: "Override SOC_ID",
-    TRACE_ACTIVE_SW_VERSION: "Certificate Active Software Version",
-    TRACE_TOGGLE_EXTSYS0_WAKEUP: "Toggle EXTSYS0 Wakeup",
-    TRACE_TOGGLE_EXTSYS1_WAKEUP: "Toggle EXTSYS1 Wakeup",
-    TRACE_MRAM_WRITE_FAILURE: "MRAM Write Miscompare Failure",
-    TRACE_MRAM_CONTROLLER_ERROR: "MRAM Write Controller Error",
-    TRACE_SERAM_RESET_HANDLER: "SERAM reset handler",
-    TRACE_FAST_BOOT: "FAST BOOT",
-    TRACE_RISC_V_RELEASED: "RISC-V released",
-    TRACE_RISC_V_EXTSYS0_RESET: "EXTSYS0 Reset",
-    TRACE_RISC_V_EXTSYS0_SHUTDOWN: "EXTSYS0 Shutdown",
-    TRACE_RISC_V_EXTSYS0_EXTSYS1_WAKEUP: "EXTSYS1 Wakeup",
-    TRACE_RISC_V_EXTSYS0_WRITE_WAKEUP_SENTINEL: "EXTSYS0 Sentinel write",
-    TRACE_BISR_OTP_CHECK: "BISR OTP check",
-    TRACE_BISR_NOT_NEEDED: "BISR not needed",
-    TRACE_BISR_ENABLE: "BISR enable",
-    TRACE_BISR_FINISHED: "BISR finished",
-    TRACE_BISR_REPAIR_FAILED: "BISR repair failed",
-    TRACE_RESUME_FROM_STANDBY: "Resume from STANDBY mode",
-    TRACE_BOOT_TIME_US: "Boot time in us",
-    TRACE_TURN_OFF_SE_POWER: "Turn off SE POWER register",
-    TRACE_TURN_ON_HOST_POWER: "Turn on HOST POWER register",
-    TRACE_HARD_FAULT: "HARD FAULT - R0",
-    TRACE_HARD_FAULT_PC: "HARD FAULT - PC",
-    TRACE_BISR_REPAIR_FAILED: "BISR repair failed",
-    TRACE_STOP_ENABLE_END: "Stop mode enable END",
-    TRACE_OFF_HANDLER: "OFF mode handler",
-    TRACE_STOP_VOTES_OK: "STOP votes OK",
-    TRACE_SE_PPU_INTR: "SE PPU interrupt",
-    TRACE_ES0_PPU_INTR: "ES0 PPU interrupt",
-    TRACE_ES1_PPU_INTR: "ES1 PPU interrupt",
-    TRACE_STOP_BEGIN: "STOP mode settings begin",
-    TRACE_STOP_0: "STOP_0",
-    TRACE_STOP_1: "STOP_1",
-    TRACE_STOP_2: "STOP_2",
-    TRACE_STOP_3: "STOP_3",
-    TRACE_STOP_4: "STOP_4",
-    TRACE_STOP_5: "STOP_5",
-    TRACE_STOP_6: "STOP_6",
-    TRACE_STOP_7: "STOP_7",
-    TRACE_STOP_8: "STOP_8",
-    TRACE_STOP_9: "STOP_9",
-    TRACE_STOP_10: "STOP_10",
-    TRACE_STOP_11: "STOP_11",
-    TRACE_STOP_12: "STOP_12",
-    TRACE_STOP_13: "STOP_13",
-    TRACE_STOP_14: "STOP_14",
-    TRACE_STOP_15: "STOP_15",
-    TRACE_PINMUX: "PinMux",
-    TRACE_BOOT_INIT: "Boot Init",
-    TRACE_POWER_INIT: "Power Init",
-    TRACE_SES_INIT: "Ses Init",
-    TRACE_MRAM_CFG: "MRAM config",
-    TRACE_MRAM_PWR_EN: "MRAM power enable",
-    TRACE_HARD_FAULT_LR: "HARD FAULT - LR",
-}
-
-service_id_lut = {
-    0: "SERVICE_MAINTENANCE_HEARTBEAT_ID",
-    1: "SERVICE_MAINTENANCE_RTC_ID",
-    100: "SERVICE_APPLICATION_CLOCK_MANAGEMENT",
-    101: "SERVICE_APPLICATION_PINMUX_ID",
-    102: "SERVICE_APPLICATION_PAD_CONTROL_ID",
-    103: "SERVICE_APPLICATION_FIRMWARE_VERSION_ID",
-    104: "SERVICE_APPLICATION_UART_WRITE_ID",
-    105: "SERVICE_APPLICATION_OSPI_WRITE_KEY_ID",
-    106: "SERVICE_APPLICATION_DMPU_ID",
-    200: "SERVICE_SYSTEM_MGMT_GET_TOC_VERSION",
-    201: "SERVICE_SYSTEM_MGMT_GET_TOC_NUMBER",
-    202: "SERVICE_SYSTEM_MGMT_GET_TOC_FLAGS",
-    203: "SERVICE_SYSTEM_MGMT_GET_TOC_VIA_CPU_ID",
-    204: "SERVICE_SYSTEM_MGMT_GET_TOC_VIA_CPU_NAME",
-    205: "SERVICE_SYSTEM_MGMT_GET_TOC_INFO",
-    206: "SERVICE_SYSTEM_MGMT_GET_OTP_INFO",
-    207: "SERVICE_SYSTEM_MGMT_GET_DEVICE_PART_NUMBER",
-    208: "SERVICE_SYSTEM_MGMT_GET_DEVICE_REVISION_DATA",
-    209: "SERVICE_SYSTEM_MGMT_SET_CAPABILITIES_DEBUG",
-    210: "SERVICE_SYSTEM_MGMT_READ_OTP",
-    211: "SERVICE_SYSTEM_MGMT_WRITE_OTP",
-    300: "SERVICE_POWER_STOP_MODE_REQ_ID",
-    301: "SERVICE_POWER_EWIC_CONFIG_REQ_ID",
-    302: "SERVICE_POWER_VBAT_WAKEUP_CONFIG_REQ_ID",
-    303: "SERVICE_POWER_MEM_RETENTION_CONFIG_REQ_ID",
-    304: "SERVICE_POWER_M55_HE_VTOR_SAVE_REQ_ID",
-    305: "SERVICE_POWER_M55_HP_VTOR_SAVE_REQ_ID",
-    306: "SERVICE_POWER_GLOBAL_STANDBY_REQ_ID",
-    307: "SERVICE_POWER_MEMORY_POWER_REQ_ID",
-    308: "SERVICE_POWER_DCDC_VOLTAGE_REQ_ID",
-    309: "SERVICE_POWER_LDO_VOLTAGE_REQ_ID",
-    310: "SERVICE_POWER_GET_RUN_REQ_ID",
-    311: "SERVICE_POWER_SET_RUN_REQ_ID",
-    312: "SERVICE_POWER_GET_OFF_REQ_ID",
-    313: "SERVICE_POWER_SET_OFF_REQ_ID",
-    314: "SERVICE_POWER_SETTING_CONFIG_REQ_ID",
-    315: "SERVICE_POWER_SETTING_GET_REQ_ID",
-    400: "SERVICE_CRYPTOCELL_GET_RND",
-    401: "SERVICE_CRYPTOCELL_GET_LCS",
-    402: "SERVICE_CRYPTOCELL_MBEDTLS_AES_INIT",
-    403: "SERVICE_CRYPTOCELL_MBEDTLS_AES_SET_KEY",
-    404: "SERVICE_CRYPTOCELL_MBEDTLS_AES_CRYPT",
-    405: "SERVICE_CRYPTOCELL_MBEDTLS_CCM_GCM_SET_KEY",
-    406: "SERVICE_CRYPTOCELL_MBEDTLS_CCM_GCM_CRYPT",
-    407: "SERVICE_CRYPTOCELL_MBEDTLS_CHACHA20_CRYPT",
-    408: "SERVICE_CRYPTOCELL_MBEDTLS_CHACHAPOLY_CRYPT",
-    409: "SERVICE_CRYPTOCELL_MBEDTLS_POLY1305_CRYPT",
-    410: "SERVICE_CRYPTOCELL_MBEDTLS_SHA_STARTS",
-    411: "SERVICE_CRYPTOCELL_MBEDTLS_SHA_PROCESS",
-    412: "SERVICE_CRYPTOCELL_MBEDTLS_SHA_UPDATE",
-    413: "SERVICE_CRYPTOCELL_MBEDTLS_SHA_FINISH",
-    414: "SERVICE_CRYPTOCELL_MBEDTLS_TRNG_HARDWARE_POLL",
-    415: "SERVICE_CRYPTOCELL_MBEDTLS_CMAC_INIT_SETKEY",
-    416: "SERVICE_CRYPTOCELL_MBEDTLS_CMAC_UPDATE",
-    417: "SERVICE_CRYPTOCELL_MBEDTLS_CMAC_FINISH",
-    418: "SERVICE_CRYPTOCELL_MBEDTLS_CMAC_RESET",
-    500: "SERVICE_BOOT_PROCESS_TOC_ENTRY",
-    501: "SERVICE_BOOT_CPU",
-    502: "SERVICE_BOOT_RELEASE_CPU",
-    503: "SERVICE_BOOT_RESET_CPU",
-    504: "SERVICE_BOOT_RESET_SOC",
-    505: "SERVICE_BOOT_SET_VTOR",
-    506: "SERVICE_BOOT_SET_ARGS",
-    600: "SERVICE_UPDATE_STOC",
-    700: "SERVICE_CLOCK_SELECT_OSC",
-    701: "SERVICE_CLOCK_SELECT_PLL",
-    702: "SERVICE_CLOCK_SET",
-    703: "SERVICE_CLOCK_ES0_SE",
-    704: "SERVICE_CLOCK_ES1_SE",
-    705: "SERVICE_CLOCK_SELECT_A32",
-    706: "SERVICE_CLOCK_SELECT_ACLK",
-    707: "SERVICE_CLOCK_SET_D",
-    708: "SERVICE_PLL_INIT",
-    709: "SERVICE_PLL_DEINIT",
-    710: "SERVICE_PLL_XTAL_START",
-    711: "SERVICE_PLL_XTAL_STOP",
-    712: "SERVICE_PLL_XTAL_IS_STARTED",
-    713: "SERVICE_PLL_CLKPLL_START",
-    714: "SERVICE_PLL_CLKPLL_STOP",
-    715: "SERVICE_PLL_CLKPLL_IS_LOCKED",
-    716: "SERVICE_CLOCK_GET",
-    800: "SERVICE_EXTSYS0_BOOT_SET_ARGS",
-    801: "SERVICE_EXTSYS0_EXTSYS1_WAKEUP",
-    802: "SERVICE_EXTSYS0_SHUTDOWN",
-}
-
-
-def readMemory32(address, offset):
+def readMemory32(address_bytes, offset):
     """
     return an integer from byte list provided
     """
-    return int.from_bytes(
-        [
-            address[offset + 0],
-            address[offset + 1],
-            address[offset + 2],
-            address[offset + 3],
-        ],
-        "little",
-    )
-
-
-def trace_find_marker(marker_value, buffer):
-    """
-    look for the Trace end marker in the trace buffer
-    @todo should look for the full 32-bits of the marker
-    """
-    marker_found = False
-    position = 0
-
-    if marker_value in buffer:
-        marker_found = True
-        position = buffer.index(marker_value)
-
-    return marker_found, position
+    if offset + 3 >= len(address_bytes):
+        raise IndexError(
+            f"readMemory32: offset {offset} is out of bounds for buffer of length {len(address_bytes)}"
+        )
+    return int.from_bytes(address_bytes[offset : offset + 4], "little")
 
 
 def trace_find_end_marker(end_marker_value, trace_buffer):
     """
     look for the Trace end marker in the trace buffer
-    @todo should look for the full 32-bits of the marker
     """
     marker_found = False
     position = 0
-
-    for each_trace_item in range(0, NUMBER_OF_TRACES + 4 + 4, 4):
-        trace_word = readMemory32(trace_buffer, each_trace_item)
-        #        print("[{0:08x}] {1:8x}".format(trace_word,end_marker_value))
-        if trace_word == end_marker_value:
-            marker_found = True
-            position = each_trace_item
-            # print("End marker 0x%x found at position 0x%x" %(end_marker_value, position))
-            break
+    # Iterate forwards to find the first occurrence of the end marker.
+    for each_trace_item_offset in range(0, len(trace_buffer) - 3, 4):
+        if (
+            len(trace_buffer) >= each_trace_item_offset + 4
+        ):  # Ensure there's enough data for a full word
+            trace_word = readMemory32(trace_buffer, each_trace_item_offset)
+            if trace_word == end_marker_value:
+                marker_found = True
+                position = each_trace_item_offset
+                break
     return marker_found, position
+
+
+def _count_markers_in_trace_section(
+    buffer_bytes,
+    section_base_offset,
+    section_size_bytes,
+    flag_m,
+    flag_s,
+    flag_wd,
+    flag_ts,
+    void_val,
+):
+    """
+    Counts the number of logical trace markers within a given section of the buffer.
+    Accounts for 1-word and 2-word entries.
+    The section_size_bytes defines the extent of the scan.
+    It also handles the edge case where the first physical slot is data for the last physical marker.
+    """
+    marker_count = 0
+    current_offset_in_section = 0  # Relative to section_base_offset
+
+    is_first_physical_slot_a_wrapped_payload = False
+    if section_size_bytes >= 4:
+        last_physical_marker_slot_offset_in_section = section_size_bytes - 4
+        last_physical_marker_absolute_offset = (
+            section_base_offset + last_physical_marker_slot_offset_in_section
+        )
+
+        if last_physical_marker_absolute_offset + 3 < len(buffer_bytes):
+            last_marker_item = readMemory32(
+                buffer_bytes, last_physical_marker_absolute_offset
+            )
+            if last_marker_item != void_val:
+                last_marker_flag_val = (last_marker_item & flag_m) >> flag_s
+                if last_marker_flag_val == flag_wd or last_marker_flag_val == flag_ts:
+                    is_first_physical_slot_a_wrapped_payload = True
+
+    while current_offset_in_section < section_size_bytes:
+        actual_buffer_offset = section_base_offset + current_offset_in_section
+
+        if (actual_buffer_offset + 3) >= (section_base_offset + section_size_bytes):
+            break
+        if (actual_buffer_offset + 3) >= len(buffer_bytes):
+            break
+
+        if is_first_physical_slot_a_wrapped_payload and current_offset_in_section == 0:
+            current_offset_in_section += 4
+            is_first_physical_slot_a_wrapped_payload = False
+            continue
+
+        trace_item = readMemory32(buffer_bytes, actual_buffer_offset)
+        marker_count += 1
+        current_offset_in_section += 4
+
+        if trace_item == void_val:
+            continue
+
+        flag_val = (trace_item & flag_m) >> flag_s
+        if flag_val == flag_wd or flag_val == flag_ts:
+            if current_offset_in_section < section_size_bytes:
+                current_offset_in_section += 4
+            else:
+                pass
+
+    return marker_count
 
 
 def trace_buffer_decode(trace_buffer, seram_flag):
     """
     trace_buffer_decode
-        based on the JYTHON code from ARM-DS
-
-    Instead of using actual memory addresses, it is using an array passed
-
     """
     if seram_flag:
         print("*** SERAM Trace Buffer decode ***")
     else:
         print("*** SEROM Trace Buffer decode ***")
 
-    #    print("[DEBUG] trace_buffer_len %d Marker Pos %d\n" % (
-    #        len(trace_buffer),
-    #        trace_buffer.index(0xee)))
-
-    # Look for the end of trace marker
-    marker_found, end_of_trace = trace_find_end_marker(
+    marker_found, end_of_trace_offset = trace_find_end_marker(
         TRACE_BUFFER_END_MARKER, trace_buffer
     )
     if not marker_found:
-        print("[ERROR] No end of trace marker was found")
+        print("[ERROR] No end of trace marker was found in the provided buffer.")
         return
 
-    # trace vars structure is at the end of the trace buffer
-    # header start
-    trace_vars_address = end_of_trace - 4
+    first_header_word_address = end_of_trace_offset - 4
 
-    trace_vars_p = readMemory32(trace_buffer, trace_vars_address)
-    print("*** Trace Header ***")
-    print("[0x{0:08x}] 0x{1:08x}".format(trace_vars_address, trace_vars_p))
-
-    trace_total = (trace_vars_p >> 16) & 0xFF
-    # print("trace_vars_p >> 16 trace_total = 0x%x" %(trace_total))
-    trace_total = min(trace_total, NUMBER_OF_TRACES / 4)
-
-    trace_vars_address += 4
-    trace_vars_p = trace_buffer[trace_vars_address]
-    print(
-        "[0x{0:08x}] 0x{1:08x}".format(
-            trace_vars_address, readMemory32(trace_buffer, trace_vars_address)
+    if first_header_word_address < 0:
+        print("[ERROR] Trace buffer structure invalid: header address is negative.")
+        return
+    if first_header_word_address + 3 >= len(trace_buffer):
+        print(
+            f"[ERROR] Trace buffer too small to read first header word at 0x{first_header_word_address:08x}."
         )
+        return
+
+    trace_vars_p = readMemory32(trace_buffer, first_header_word_address)
+    print("*** Trace Header ***")
+    print(f"[0x{first_header_word_address:08x}] Raw trace_vars_p: 0x{trace_vars_p:08x}")
+
+    rollover_flag = (trace_vars_p >> 24) & 0xFF
+    num_entries_in_current_pass = (trace_vars_p >> 16) & 0xFF
+    write_index_words = (trace_vars_p >> 8) & 0xFF
+
+    if rollover_flag == 1:
+        print("Rollover detected")
+    else:
+        print("No rollover detected")
+
+    if DEBUG_PRINT_ENABLE:
+        print(
+            f"Decoded Num Entries in Current Pass (from header byte 2): {num_entries_in_current_pass}"
+        )
+        print(
+            f"Decoded Write Index (from header byte 1, 0-indexed word): {write_index_words}"
+        )
+
+    end_marker_val_from_buffer = readMemory32(trace_buffer, end_of_trace_offset)
+    print(
+        f"[0x{end_of_trace_offset:08x}] 0x{end_marker_val_from_buffer:08x} (End Marker)"
     )
-    print("trace_total = %d" % (trace_total))
+
+    trace_data_section_start_offset = TRACE_BASE_ADDRESS
+    effective_circular_buffer_size_bytes = (
+        first_header_word_address - trace_data_section_start_offset
+    )
+
+    if effective_circular_buffer_size_bytes <= 0:
+        print(
+            f"[ERROR] Invalid trace data section size: {effective_circular_buffer_size_bytes} bytes. Header is at or before data start."
+        )
+        return
+    if effective_circular_buffer_size_bytes % 4 != 0:
+        print(
+            f"[WARNING] Effective circular buffer size ({effective_circular_buffer_size_bytes} bytes) is not a multiple of 4. This may indicate a malformed buffer or incorrect header position."
+        )
+
+    if DEBUG_PRINT_ENABLE:
+        print(
+            f"Effective circular buffer size for this dump: {effective_circular_buffer_size_bytes} bytes ({effective_circular_buffer_size_bytes // 4} words)"
+        )
+
+    trace_total = 0
+    initial_word_offset_bytes = 0
+
+    if rollover_flag == 1:
+        if DEBUG_PRINT_ENABLE:
+            print(
+                "Calculating total entries by scanning the effective trace data section."
+            )
+        trace_total = _count_markers_in_trace_section(
+            trace_buffer,
+            trace_data_section_start_offset,
+            effective_circular_buffer_size_bytes,
+            FLAG_MASK,
+            FLAG_MASK_SHIFT,
+            TRACE_FLAG_WORD_DATA,
+            TRACE_FLAG_TIMESTAMP,
+            VOID_ENTRY,
+        )
+        if DEBUG_PRINT_ENABLE:
+            print(
+                f"Calculated total trace markers in buffer (due to rollover): {trace_total}"
+            )
+
+        tentative_initial_offset_bytes = write_index_words * 4
+        initial_word_offset_bytes = tentative_initial_offset_bytes
+
+        if effective_circular_buffer_size_bytes > 0:
+            offset_of_potential_marker_before_write_index = (
+                tentative_initial_offset_bytes
+                - 4
+                + effective_circular_buffer_size_bytes
+            ) % effective_circular_buffer_size_bytes
+            absolute_addr_of_potential_marker = (
+                trace_data_section_start_offset
+                + offset_of_potential_marker_before_write_index
+            )
+
+            if absolute_addr_of_potential_marker + 3 < len(trace_buffer):
+                item_before_write_index = readMemory32(
+                    trace_buffer, absolute_addr_of_potential_marker
+                )
+                if item_before_write_index != VOID_ENTRY:
+                    flag_of_item_before = (
+                        item_before_write_index & FLAG_MASK
+                    ) >> FLAG_MASK_SHIFT
+                    if (
+                        flag_of_item_before == TRACE_FLAG_WORD_DATA
+                        or flag_of_item_before == TRACE_FLAG_TIMESTAMP
+                    ):
+                        initial_word_offset_bytes = (
+                            offset_of_potential_marker_before_write_index
+                        )
+                        if DEBUG_PRINT_ENABLE:
+                            print(
+                                f"Adjusted start: write_index points to payload. Oldest marker is at offset {initial_word_offset_bytes}."
+                            )
+
+        if (
+            initial_word_offset_bytes >= effective_circular_buffer_size_bytes
+            and effective_circular_buffer_size_bytes > 0
+        ):
+            print(
+                f"[WARNING] Calculated initial_word_offset_bytes ({initial_word_offset_bytes}) for rollover is out of effective buffer bounds ({effective_circular_buffer_size_bytes}). Resetting to 0."
+            )
+            initial_word_offset_bytes = 0
+        if DEBUG_PRINT_ENABLE:
+            print(
+                f"Starting chronological decode at byte offset: {initial_word_offset_bytes} (Word offset: {initial_word_offset_bytes // 4})"
+            )
+    else:
+        trace_total = num_entries_in_current_pass
+        if DEBUG_PRINT_ENABLE:
+            print(f"Using num_entries_in_current_pass as trace_total: {trace_total}")
+            print(f"Starting decode at byte offset: {initial_word_offset_bytes}")
+
+    if trace_total == 0:
+        print("[INFO] No trace entries to decode (trace_total is 0).")
+        return
+
     print("********************")
 
-    # Decode the trace buffer
+    ADDR_WIDTH = 10
+    RAW_ITEM_WIDTH = 10
+    SEQ_WIDTH = 4
+    LR_WIDTH = 10
+    MARKER_STR_WIDTH = 45
+    MARKER_DATA_WIDTH = 22
+    CPU_FREQ_WIDTH = 10
+    US_DIFF_WIDTH = 15
+    CUMULATIVE_US_WIDTH = 21
+
+    header_fmt = (
+        f"{{:<{ADDR_WIDTH}}} {{:<{RAW_ITEM_WIDTH}}} {{:<{SEQ_WIDTH}}} {{:<{LR_WIDTH}}} {{:<{MARKER_STR_WIDTH}}} "
+        f"{{:<{MARKER_DATA_WIDTH}}} {{:<{CPU_FREQ_WIDTH}}} {{:<{US_DIFF_WIDTH}}} {{:<{CUMULATIVE_US_WIDTH}}}"
+    )
     print(
-        "  Address      Seq#      LR                   Trace Marker                           Marker Data"
+        header_fmt.format(
+            "Address",
+            "Raw Item",
+            "Seq#",
+            "LR",
+            "Trace Marker",
+            "Marker Data",
+            "CPU Freq",
+            "Diff(µs)",
+            "Time elapsed (µs)",
+        )
+    )
+    print(
+        header_fmt.format(
+            "-" * (ADDR_WIDTH),
+            "-" * RAW_ITEM_WIDTH,
+            "-" * SEQ_WIDTH,
+            "-" * LR_WIDTH,
+            "-" * MARKER_STR_WIDTH,
+            "-" * MARKER_DATA_WIDTH,
+            "-" * CPU_FREQ_WIDTH,
+            "-" * US_DIFF_WIDTH,
+            "-" * CUMULATIVE_US_WIDTH,
+        )
     )
 
-    word_offset = 0
+    word_offset_bytes = initial_word_offset_bytes
+    previous_timestamp_value = 0
+    first_timestamp_processed = False
+    pll_end_marker_reached = False
+    cumulative_us_elapsed = 0.0
+    entries_processed = 0
 
-    while trace_total > 0:
-        # print(" ")
-        # print("while() start. trace_total = 0x%x" %(trace_total))
-        variable_enabled = False
-        read_address = TRACE_BASE_ADDRESS + word_offset
-        trace_item = readMemory32(trace_buffer, read_address)
+    while entries_processed < trace_total:
+        current_trace_item_address_in_buffer = (
+            trace_data_section_start_offset + word_offset_bytes
+        )
+
+        if current_trace_item_address_in_buffer + 3 >= (
+            trace_data_section_start_offset + effective_circular_buffer_size_bytes
+        ):
+            print(
+                f"[ERROR] Attempting to read trace item at offset {current_trace_item_address_in_buffer} which is outside the effective data section (size {effective_circular_buffer_size_bytes}). Processed {entries_processed}/{trace_total} entries."
+            )
+            break
+        if current_trace_item_address_in_buffer + 3 >= len(trace_buffer):
+            print(
+                f"[ERROR] Attempting to read trace item past buffer end at offset {current_trace_item_address_in_buffer}. Processed {entries_processed}/{trace_total} entries."
+            )
+            break
+
+        trace_item = readMemory32(trace_buffer, current_trace_item_address_in_buffer)
+        s_address = f"[{current_trace_item_address_in_buffer:08x}]"
+        s_raw_item = f"0x{trace_item:08X}"
+        s_seq_id = ""
+        s_lr = ""
+        s_marker_string = "VOID_ENTRY"
+        s_marker_data = ""
+        s_cpu_freq = ""
+        s_us_diff = ""
+        s_cumulative_us = ""
+        word_data_consumed_this_entry_bytes = 0
+
         if trace_item == VOID_ENTRY:
-            print("  XXXXXXXX")
+            s_marker_string = s_marker_string.replace("\n", " ")
+            print(
+                header_fmt.format(
+                    s_address, s_raw_item, "", "", s_marker_string, "", "", "", ""
+                )
+            )
         else:
             flag = (trace_item & FLAG_MASK) >> FLAG_MASK_SHIFT
             seq_id = (trace_item & SEQ_ID_MASK) >> SEQ_ID_MASK_SHIFT
             addr = (trace_item & ADDR_MASK) >> ADDR_MASK_SHIFT
             marker = (trace_item & MARKER_MASK) >> MARKER_MASK_SHIFT
+            s_seq_id = str(seq_id)
+            s_lr = f"0x{addr:04X}"
+            current_marker_str = marker_lookup.get(
+                marker, f"UNKNOWN_MARKER_0x{marker:X}"
+            )
+            s_marker_string = current_marker_str
 
-            # print("word_offset = 0x%x" %(word_offset))
-            # print("trace_item = 0x%x" %(trace_item))
-            # print("flag = 0x%x" %(flag))
-            # print("marker = 0x%x" %(marker))
-            # print("read_address = 0x%x" %(read_address))
+            # SERAM no longer uses the PLL for it's Clock
+            #            if pll_end_marker_reached:
+            #                current_cpu_frequency_hz = 100_000_000
+            #                s_cpu_freq = "100 MHz"
+            #            else:
+            #                current_cpu_frequency_hz = 76_800_000
+            #                s_cpu_freq = "76.8 MHz"
+
+            current_cpu_frequency_hz = 76_800_000
+            s_cpu_freq = "76.8 MHz"
+
+            is_seram_reset_handler_marker = current_marker_str == marker_lookup.get(
+                TRACE_SERAM_RESET_HANDLER
+            )
+
+            if is_seram_reset_handler_marker:
+                pll_end_marker_reached = False
+                current_cpu_frequency_hz = 76_800_000
+                s_cpu_freq = "76.8 MHz"
+
+            data_word_logical_offset = (
+                word_offset_bytes + 4
+            ) % effective_circular_buffer_size_bytes
+            actual_data_word_address_in_buffer = (
+                trace_data_section_start_offset + data_word_logical_offset
+            )
 
             if TRACE_FLAG_WORD_DATA == flag:
-                # print("TRACE_FLAG_WORD_DATA")
-                # trace_total = trace_total - 1 #marker + data
-
-                read_address = TRACE_BASE_ADDRESS + word_offset
-                # second 32-bit word is data we need, advance the word_offset
-                # word_offset = word_offset + 4
-                word_offset = (word_offset + 4) % NUMBER_OF_TRACES
-                word_data_address = TRACE_BASE_ADDRESS + word_offset
-                word_data = readMemory32(trace_buffer, word_data_address)
-
-                # print("word_offset = 0x%x" %(word_offset))
-                # print("word_data_address = 0x%x" %(word_data_address))
-                # print("word_data = 0x%x" %(word_data))
-
-                if marker in marker_lookup:
-                    marker_string = marker_lookup[marker]
-                    if marker_string is None:
-                        marker_string = "MARKER?"
-                    variable_enabled = False
+                word_data_consumed_this_entry_bytes = 4
+                if actual_data_word_address_in_buffer + 3 >= (
+                    trace_data_section_start_offset
+                    + effective_circular_buffer_size_bytes
+                ) or actual_data_word_address_in_buffer + 3 >= len(trace_buffer):
+                    s_marker_data = "ERR_READ_DATA_BOUNDS"
                 else:
-                    variable_enabled = True
-
-                # print("marker_string = %s" %(marker_string))
-                marker = (trace_item & MARKER_MASK) >> MARKER_MASK
-                #          print("[%08x] %2d    %8X   %4X      %2X" %(read_address,
-                #                                                      seq_id,
-                #                                                      trace_item,
-                #                                                      addr,
-                #                                                      marker))
-                #           print("variable_enabled = %d" %(variable_enabled))
-                if marker_string.__eq__("Process MHU"):
-                    service_id_string = service_id_lut[word_data]
-                    print(
-                        "[%08x]     %2d      0x%04X       %-45s    %s"
-                        % (read_address, seq_id, addr, marker_string, service_id_string)
+                    word_data = readMemory32(
+                        trace_buffer, actual_data_word_address_in_buffer
                     )
-                elif variable_enabled is True:
-                    if marker_string.__eq__("STOC Part#"):
-                        print("PART NUMBER#1")
-                        print(
-                            "[%08x]     %2d      0x%04X       %8X                       0x%08X %c"
-                            % (
-                                read_address,
-                                addr,
-                                seq_id,
-                                0x10,
-                                trace_item,
-                                word_data,
-                                chr(word_data & 0xFF),
-                            )
+                    if current_marker_str == "TOC Part#":
+                        chars = "".join(
+                            [
+                                chr((word_data >> (i * 8)) & 0xFF)
+                                for i in range(4)
+                                if (word_data >> (i * 8)) & 0xFF != 0
+                            ]
                         )
+                        s_marker_data = (
+                            f"0x{word_data:08X} {chars.strip().replace(chr(0), '')}"
+                        )
+                    elif (
+                        current_marker_str == "Process MHU"
+                        and word_data in service_id_lut
+                    ):
+                        s_marker_data = service_id_lut[word_data][
+                            : MARKER_DATA_WIDTH - 1
+                        ]
                     else:
-                        print(
-                            "[%08x]     %2d      0x%04X       %8X                       0x%08X"
-                            % (read_address, seq_id, addr, trace_item, word_data)
-                        )
-                else:
-                    if marker_string.__eq__("STOC Part#"):  # Decode the STOC Part #
-                        print(
-                            "[%08x]     %2d      0x%04X       %-45s    0x%08X %c%c%c%c"
-                            % (
-                                read_address,
-                                seq_id,
-                                addr,
-                                marker_string,
-                                word_data,
-                                chr(word_data & 0xFF),
-                                chr(word_data >> 8 & 0xFF),
-                                chr(word_data >> 16 & 0xFF),
-                                chr(word_data >> 24 & 0xFF),
-                            )
-                        )
-                    else:
-                        print(
-                            "[%08x]     %2d      0x%04X       %-45s    0x%08X"
-                            % (read_address, seq_id, addr, marker_string, word_data)
-                        )
-
+                        s_marker_data = f"0x{word_data:08X}"
             elif TRACE_FLAG_TIMESTAMP == flag:
-                # print("TRACE_FLAG_TIMESTAMP")
-                # trace_total = trace_total - 1 #marker + timestamp
-                # second 32-bit word is time stamp, advance the word_offset
-                # word_offset = word_offset + 4
-                word_offset = (word_offset + 4) % NUMBER_OF_TRACES
-                read_address = TRACE_BASE_ADDRESS + word_offset
-                trace_item_dword = readMemory32(trace_buffer, read_address)
-
-                # print("word_offset = 0x%x" %(word_offset))
-                # print("read_address = 0x%x" %(read_address))
-                # print("trace_item_dword = 0x%x" %(trace_item_dword))
-
-                if marker in marker_lookup:
-                    marker_string = marker_lookup[marker]
-                    if marker_string is None:
-                        marker_string = "MARKER?"
-                    variable_enabled = False
+                word_data_consumed_this_entry_bytes = 4
+                if actual_data_word_address_in_buffer + 3 >= (
+                    trace_data_section_start_offset
+                    + effective_circular_buffer_size_bytes
+                ) or actual_data_word_address_in_buffer + 3 >= len(trace_buffer):
+                    s_marker_data = "ERR_READ_TS_BOUNDS"
                 else:
-                    variable_enabled = True
-                print(
-                    "[%08x]     %2d      0x%04X       %-45s    T:%8d"
-                    % (read_address, seq_id, addr, marker_string, trace_item_dword)
-                )
+                    timestamp_val = readMemory32(
+                        trace_buffer, actual_data_word_address_in_buffer
+                    )
+                    s_marker_data = f"T:{timestamp_val}"
+                    tick_diff = 0
 
+                    if is_seram_reset_handler_marker:
+                        tick_diff = timestamp_val
+                        if DEBUG_PRINT_ENABLE:
+                            print(
+                                f"DEBUG: Special diff for '{current_marker_str}' -> tick_diff = {tick_diff}"
+                            )
+                        first_timestamp_processed = True
+                    elif not first_timestamp_processed:
+                        tick_diff = timestamp_val
+                        first_timestamp_processed = True
+                    else:
+                        tick_diff = timestamp_val - previous_timestamp_value
+
+                    previous_timestamp_value = timestamp_val
+
+                    if current_cpu_frequency_hz > 0:
+                        current_us_diff_val = (
+                            tick_diff / current_cpu_frequency_hz
+                        ) * 1_000_000
+                        s_us_diff = f"{current_us_diff_val:.2f}"
+                        if is_seram_reset_handler_marker:
+                            cumulative_us_elapsed = (
+                                current_us_diff_val  # Reset cumulative time
+                            )
+                        else:
+                            cumulative_us_elapsed += (
+                                current_us_diff_val  # Add to existing cumulative time
+                            )
+                        s_cumulative_us = f"{cumulative_us_elapsed:.2f}"
+                    else:
+                        s_us_diff = "N/A Freq"
+                        s_cumulative_us = "N/A Freq"
             elif TRACE_FLAG_BYTE_DATA == flag:
-                # print("TRACE_FLAG_BYTE_DATA")
-                if marker in marker_lookup:
-                    marker_string = marker_lookup[marker]
-                    if marker_string is None:
-                        marker_string = "MARKER?"
-                    variable_enabled = False
-                else:
-                    variable_enabled = True
-
-                if variable_enabled is True:
-                    print(
-                        "[%08x]     %2d      0x%04X       %2X"
-                        % (read_address, seq_id, addr, marker)
-                    )
-                else:
-                    print(
-                        "[%08x]     %2d      0x%04X       %-45s"
-                        % (read_address, seq_id, addr, marker_string)
-                    )
-
+                s_marker_data = f"Data:0x{marker:02X}"
+            elif TRACE_FLAG_NO_DATA == flag:
+                s_marker_data = ""
             else:
-                # print("Unknown flag = 0x%x" %(flag))
-                print(
-                    "[%08x]     %2d      0x%04X       0x%04X                                           0x%02X"
-                    % (read_address, seq_id, trace_item, addr, marker)
+                s_marker_data = f"UNK_FLAG_0x{flag:02X}"
+
+            s_marker_string = s_marker_string.replace("\n", " ").replace("\r", "")
+            s_marker_data = s_marker_data.replace("\n", " ").replace("\r", "")
+            print(
+                header_fmt.format(
+                    s_address,
+                    s_raw_item,
+                    s_seq_id,
+                    s_lr,
+                    s_marker_string,
+                    s_marker_data,
+                    s_cpu_freq,
+                    s_us_diff,
+                    s_cumulative_us,
                 )
+            )
 
-        word_offset = (word_offset + 4) % NUMBER_OF_TRACES
+            if (
+                not is_seram_reset_handler_marker
+                and not pll_end_marker_reached
+                and current_marker_str == marker_lookup.get(TRACE_PLL_INIT_END)
+            ):
+                pll_end_marker_reached = True
 
-        trace_total = trace_total - 1
+        word_offset_bytes = (
+            word_offset_bytes + 4 + word_data_consumed_this_entry_bytes
+        ) % effective_circular_buffer_size_bytes
+        entries_processed += 1
 
-        #        if word_offset >= (NUMBER_OF_TRACES * 4):
-        if word_offset >= (NUMBER_OF_TRACES):
-            break
+
+if __name__ == "__main__":
+    # --- To test DEBUG prints, set DEBUG_PRINT_ENABLE = True above ---
+
+    print("--- Running with dummy NO ROLLOVER SERAM buffer ---")
+    header_no_rollover = (0x00 << 24) | (3 << 16) | (0 << 8) | 0x01
+    dummy_trace_data_no_rollover = bytearray()
+    item1 = (
+        (0x1000 << ADDR_MASK_SHIFT)
+        | (TRACE_BEGIN_RESET << MARKER_MASK_SHIFT)
+        | (1 << SEQ_ID_MASK_SHIFT)
+        | TRACE_FLAG_TIMESTAMP
+    )
+    ts1 = 76800
+    dummy_trace_data_no_rollover.extend(item1.to_bytes(4, "little"))
+    dummy_trace_data_no_rollover.extend(ts1.to_bytes(4, "little"))
+    item2 = (
+        (0x2000 << ADDR_MASK_SHIFT)
+        | (TRACE_PLL_INIT_END << MARKER_MASK_SHIFT)
+        | (2 << SEQ_ID_MASK_SHIFT)
+        | TRACE_FLAG_WORD_DATA
+    )
+    data2 = 0xAABBCCDD
+    dummy_trace_data_no_rollover.extend(item2.to_bytes(4, "little"))
+    dummy_trace_data_no_rollover.extend(data2.to_bytes(4, "little"))
+    item3 = (
+        (0x3000 << ADDR_MASK_SHIFT)
+        | (TRACE_FIREWALLS_INITIALIZED << MARKER_MASK_SHIFT)
+        | (3 << SEQ_ID_MASK_SHIFT)
+        | TRACE_FLAG_NO_DATA
+    )
+    dummy_trace_data_no_rollover.extend(item3.to_bytes(4, "little"))
+    buffer_for_decode_no_rollover = bytearray()
+    buffer_for_decode_no_rollover.extend(dummy_trace_data_no_rollover)
+    buffer_for_decode_no_rollover.extend(header_no_rollover.to_bytes(4, "little"))
+    buffer_for_decode_no_rollover.extend(TRACE_BUFFER_END_MARKER.to_bytes(4, "little"))
+    trace_buffer_decode(buffer_for_decode_no_rollover, seram_flag=True)
+    print("-" * 80)
+
+    print(
+        "--- Running with dummy ROLLOVER SERAM buffer (write_index points to payload) ---"
+    )
+    header_rollover_payload_at_widx = (0x01 << 24) | (3 << 16) | (0 << 8) | 0x05
+    dummy_trace_data_widx_payload = bytearray(16)
+    dummy_trace_data_widx_payload[0:4] = (0xDDDDDDDD).to_bytes(4, "little")
+    item_r_1 = (
+        (0xA000 << ADDR_MASK_SHIFT)
+        | (TRACE_COLD_BOOT << MARKER_MASK_SHIFT)
+        | (1 << SEQ_ID_MASK_SHIFT)
+        | TRACE_FLAG_NO_DATA
+    )
+    dummy_trace_data_widx_payload[4:8] = item_r_1.to_bytes(4, "little")
+    item_r_2 = (
+        (0xB000 << ADDR_MASK_SHIFT)
+        | (TRACE_WAKE_UP << MARKER_MASK_SHIFT)
+        | (2 << SEQ_ID_MASK_SHIFT)
+        | TRACE_FLAG_NO_DATA
+    )
+    dummy_trace_data_widx_payload[8:12] = item_r_2.to_bytes(4, "little")
+    item_r_oldest_marker = (
+        (0xC000 << ADDR_MASK_SHIFT)
+        | (TRACE_PLL_INIT_END << MARKER_MASK_SHIFT)
+        | (3 << SEQ_ID_MASK_SHIFT)
+        | TRACE_FLAG_WORD_DATA
+    )
+    dummy_trace_data_widx_payload[12:16] = item_r_oldest_marker.to_bytes(4, "little")
+    buffer_decode_widx_payload = bytearray()
+    buffer_decode_widx_payload.extend(dummy_trace_data_widx_payload)
+    buffer_decode_widx_payload.extend(
+        header_rollover_payload_at_widx.to_bytes(4, "little")
+    )
+    buffer_decode_widx_payload.extend(TRACE_BUFFER_END_MARKER.to_bytes(4, "little"))
+    trace_buffer_decode(buffer_decode_widx_payload, seram_flag=True)
+    print("-" * 80)
+
+    print(
+        "--- Running with dummy ROLLOVER SERAM buffer (write_index points to marker) ---"
+    )
+    header_rollover_marker_at_widx = (0x01 << 24) | (3 << 16) | (1 << 8) | 0x05
+    buffer_decode_marker_at_widx = bytearray()
+    buffer_decode_marker_at_widx.extend(dummy_trace_data_widx_payload)
+    buffer_decode_marker_at_widx.extend(
+        header_rollover_marker_at_widx.to_bytes(4, "little")
+    )
+    buffer_decode_marker_at_widx.extend(TRACE_BUFFER_END_MARKER.to_bytes(4, "little"))
+    trace_buffer_decode(buffer_decode_marker_at_widx, seram_flag=True)
+
+    # Example of loading from a file:
+    # try:
+    #     with open("your_trace_dump.bin", "rb") as f:
+    #         actual_trace_data = bytearray(f.read())
+    #     print("\n--- Running with actual trace data from file ---")
+    #     trace_buffer_decode(actual_trace_data, seram_flag=True)
+    # except FileNotFoundError:
+    #     print("\n[INFO] Actual trace data file (your_trace_dump.bin) not found. Skipping.")
+    # except Exception as e:
+    #     print(f"\n[ERROR] Could not process actual trace file: {e}")

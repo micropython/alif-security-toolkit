@@ -16,7 +16,7 @@
         "Get SES Banner" : "get_banner_action",
         "Get CPU boot info" : "get_cpu_status_action",
         "Device enquiry" : "get_enquiry_action",
-        "Get revision info" : "get_revision_action", 
+        "Get revision info" : "get_revision_action",
         "Get OTP data" : "get_otp_read",
         "Get MRAM data" : "get_mram_read_action",
         "Get log data" : "get_log_data_action",
@@ -35,8 +35,9 @@
         "Terminal mode" : "terminal_mode",
         "Get SERAM metrics" : "get_seram_info_action",
         "Get ECC key" : "get_ecc_key",
-        "Get Firewall configuration" : "get_firewall_config"
-    },
+        "Get Firewall configuration" : "get_firewall_config",
+        "Alt Boot OTP" : "write_altboot_otp_action"
+     },
     "setting" : {
       "Enable LOGGING" : "set_logger_enable_action",
       "Disable LOGGING" : "set_logger_disable_action",

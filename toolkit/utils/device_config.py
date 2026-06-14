@@ -42,10 +42,10 @@ misc_settings_headers = {
     "HFXO_PFET_GM_CTRL": "0x00030001",
     "HFXO_NFET_GM_CTRL": "0x00040001",
     "SE_BOOT_INFO": "0x00050001",
-    #  'ISP_MAINTENANCE_SUPPORT' : '0x00060001',
-    #  'FW_RUNTIME_CFG'          : '0x00070001',
-    #  'PINMUX_RUNTIME_CFG'      : '0x00080001',
-    #  'CLOCK_RUNTIME_CFG'       : '0x00090001'
+    "BOR_HYSTERESIS": "0x00060001",
+    "BOR_THRESHOLD": "0x00070001",
+    "SHARED_MEM_CTRL": "0x00080001",
+    "REG_ALIASING_CTRL": "0x00090001",
 }
 
 metadata_settings_headers = {
@@ -73,6 +73,10 @@ hfxo_frequency_cfg_spark = {
     38400000: "0x11900000",
 }
 
+hfxo_frequency_cfg_eagle = {
+    38400000: "0x129AAAAA",
+}
+
 lfxo_frequency = {32768: 32768, 32000: 32000}
 
 
@@ -85,6 +89,7 @@ def validateSections(sections, file):
 
 
 def createBinary(file):
+
     try:
         f = open(file, "wb")
     except:
@@ -104,6 +109,7 @@ def writeBinary(f, data):
 
 
 def processMetadata(configuration):
+
     data = bytearray()
     for sec in configuration:
         if sec != "external_clock_sources":
@@ -124,6 +130,10 @@ def processMetadata(configuration):
                 if "frequency" in setting:
                     if utils.config.DEVICE_FEATURE_SET == "Spark":
                         frequency_cfg = hfxo_frequency_cfg_spark.get(
+                            setting["frequency"]
+                        )
+                    elif utils.config.DEVICE_FEATURE_SET == "Eagle":
+                        frequency_cfg = hfxo_frequency_cfg_eagle.get(
                             setting["frequency"]
                         )
                     else:
@@ -232,12 +242,18 @@ def processMiscellaneous(configuration):
             continue
         header = misc_settings_headers.get(sec["id"])
         data += bytes(int(header, 16).to_bytes(4, "little"))
-        data += bytes(int(sec["value"]).to_bytes(4, "little"))
+        if sec["id"] == "SHARED_MEM_CTRL" or sec["id"] == "REG_ALIASING_CTRL":
+            # this setting is a hex string
+            val = int(sec["value"], 16)
+        else:
+            val = int(sec["value"])
+        data += bytes(val.to_bytes(4, "little"))
 
     return data
 
 
 def gen_device_config(file, is_icv):
+
     cfg = read_global_config("build/config/" + file)
     validateSections(cfg, file)  # request from SE-1938
     binFile = file[:-5] + ".bin"

@@ -1,20 +1,30 @@
 {
     "groups" : {
-         "ROM" : "rom",
+        "ROM" : "rom",
         "Device Information" : "info",
-        "Utilities" : "utils"
+        "Utilities" : "utils",
+        "Alt. Boot Octal SPI" : "ospi"
     },
     "info" : {
         "Device enquiry" : "get_enquiry_action",
-        "Get revision info" : "get_revision_action", 
+        "Get revision info" : "get_revision_action",
         "Get SEROM trace data": "get_trace_buffer"
     },
     "utils" : {
         "Terminal mode" : "terminal_mode"
     },
+    "ospi" : {
+        "OSPI erase sector size   4K" : "ospi_erase_sector_4_action",
+        "OSPI erase sector size  32K" : "ospi_erase_sector_32_action",
+        "OSPI erase sector size 128K" : "ospi_erase_sector_128_action",
+        "OSPI erase chip" : "ospi_erase_chip_action",
+        "OSPI flag toggle" : "ospi_flag_toggle_action",
+        "OSPI settings" : "ospi_settings_action",
+        "OSPI init" : "ospi_init_action"
+    },
     "rom" : {
-     "Recovery" : "recovery_action",
-     "Recovery (No Reset)" : "recovery_action_no_reset"
+     "MRAM Recovery" : "recovery_action",
+     "MRAM Recovery (No Reset)" : "recovery_action_no_reset"
     }
 }
 

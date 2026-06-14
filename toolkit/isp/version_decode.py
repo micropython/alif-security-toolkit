@@ -11,6 +11,7 @@ import struct
 from isp_print import isp_print_color
 from isp_print import isp_print_response
 from otp_mfgr_decode import decode_otp_manufacture
+from trim_decode import trim_decoder
 
 # Wounding bits
 OTP_WOUNDING_ALIF_DFT = 1 << 0
@@ -63,11 +64,19 @@ def display_string(field):
     """
     # isp_print_color("blue"," " + str(field) + "\t\t=  ")
     for ch in field:
-        l = hex(ch)[2:]
+        #        l = hex(ch)[2:]           # Hex in Lower case
+        l = hex(ch)[2:].upper()  # Hex in Upper case
         if len(l) == 1:
             l = "0" + l
         isp_print_color("blue", l)
     print("")
+
+
+def ascii_to_string(ascii_list):
+    """
+    convert ascii list to string
+    """
+    return "".join(chr(x) for x in ascii_list if x > 0)
 
 
 def version_decode(isp, message):
@@ -135,7 +144,9 @@ def version_decode(isp, message):
         isp_print_color("blue", " MfgData\t=  ")
         # isp_print_color("blue",hex(MfgDatatInt))
         display_string(MfgData)
+        trim_decoder(MfgData)
         if MfgDatatInt != 0:
+            print("")
             decode_otp_manufacture(MfgData)
 
         # SerialN = (message[127:134]) #bytes 127-133 (limit 134)
@@ -143,6 +154,21 @@ def version_decode(isp, message):
         # isp_print_color("blue",hex(int.from_bytes(SerialN,"little")))
         # print("")
 
+        SerialN = message[
+            126:134
+        ]  # bytes 127-133 (limit 134)    Had to pull back one byte
+        SerialNInt = int.from_bytes(SerialN, "little")
+        if SerialNInt != 0:
+            isp_print_color(
+                "blue",
+                " SerialN\t=  %s "  # Adding print for “ENG1”
+                % (ascii_to_string(SerialN)),
+            )
+            isp_print_color("blue", hex(int.from_bytes(SerialN, "little")))
+            print("")
+
         LCS = message[134]
         isp_print_color("blue", " LCS\t\t=  0x%x (%s)" % (LCS, LCS_lut.get(LCS)))
         print("")
+
+        return version
