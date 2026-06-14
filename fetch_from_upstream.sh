@@ -27,8 +27,8 @@ cp -r $alifsrc/* $alifdest
 rm -rf `find $alifdest -name __pycache__`
 
 # Convert newlines to Unix style, and ensure there's a newline at the end of the file.
-for file in `find $alifdest -regex '.+\.\(py\|txt\|json\)'`; do
-    cat $file | sed 's/$//' | sed '$a\' > tmp$$
+for file in `find $alifdest -regex '.+\.\(cfg\|db\|ds\|log\|py\|txt\|json\)'`; do
+    cat $file | sed 's/$//' | sed 's/[[:blank:]]*$//' | sed '$a\' > tmp$$
     /bin/mv tmp$$ $file
 done
 
