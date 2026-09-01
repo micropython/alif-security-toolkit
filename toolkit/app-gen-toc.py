@@ -37,15 +37,11 @@ from utils.gen_fw_cfg import *
 # 0.32.000      split image signature
 # 0.33.000      add mramAddress as sufix in content certificate name (to differentiate when using the same image name...)
 # 0.34.000      Added PART# to ATOC Header - Now, each generated ATOC Package is tied to a specific device part number
-TOOL_VERSION = "0.34.000"
+# 0.35.000      Added support for OSPI external memory
+TOOL_VERSION = "0.35.000"
 
 EXIT_WITH_ERROR = 1
 
-
-# memory defines for Alif/OEM MRAM Addresses and Sizes
-# ALIF_BASE_ADDRESS = utils.mem_defs.ALIF_BASE_ADDRESS
-# OEM_BASE_ADDRESS = utils.mem_defs.OEM_BASE_ADDRESS
-# MRAM_BASE_ADDRESS = utils.mem_defs.MRAM_BASE_ADDRESS
 
 # OEM TOC sizes
 TOC_ENTRY_SIZE = 32
@@ -650,6 +646,12 @@ def main():
         help="input file  (check build/config/app-cfg.json as an example",
     )
     parser.add_argument(
+        "-m",
+        "--memory",
+        type=str,
+        help="generate for external memory <ospi0|ospi1:xx> where xx is memory size in MB (default is ospi1:32",
+    )
+    parser.add_argument(
         "-o",
         "--output",
         type=str,
@@ -698,6 +700,38 @@ def main():
     OEM_BASE_ADDRESS = utils.config.APP_BASE_ADDRESS
     APP_MRAM_SIZE = utils.config.APP_MRAM_SIZE
 
+    print(args.memory)
+    if args.memory != None:
+        memParts = args.memory.split(":")
+        if len(memParts) != 2:
+            print("[ERROR] Invalid memory argument format")
+            sys.exit(EXIT_WITH_ERROR)
+        memType = memParts[0].lower()
+        try:
+            memSizeMB = int(memParts[1])
+        except:
+            print("[ERROR] Invalid memory size value")
+            sys.exit(EXIT_WITH_ERROR)
+
+        if memType not in ["ospi0", "ospi1"]:
+            print("[ERROR] Invalid memory type. Supported types are: ospi0, ospi1")
+            sys.exit(EXIT_WITH_ERROR)
+
+        MRAM_SIZE = memSizeMB * 1024 * 1024
+
+        MRAM_BASE_ADDRESS = getAddressFromOspiMemType(memType)
+        if MRAM_BASE_ADDRESS == 0x00:
+            print(
+                "[ERROR] Could not determine MRAM Base Address for memory type: "
+                + memType
+            )
+            sys.exit(EXIT_WITH_ERROR)
+
+        # ALIF_MRAM_SIZE = ALIF_EAGLE_OSPI_PACKAGE_SIZE
+        ALIF_BASE_ADDRESS = MRAM_BASE_ADDRESS + MRAM_SIZE - ALIF_EAGLE_OSPI_PACKAGE_SIZE
+        OEM_BASE_ADDRESS = MRAM_BASE_ADDRESS
+        APP_MRAM_SIZE = MRAM_SIZE - ALIF_EAGLE_OSPI_PACKAGE_SIZE
+
     print("Generating APP Package with:")
     print("Device Part# " + DEVICE_PART_NUMBER + " - Rev: " + DEVICE_REVISION)
 
@@ -707,6 +741,7 @@ def main():
     print("- Configuration file: " + args.filename)
     print("- Output file: " + args.output)
     print("")
+
     fwsections = read_json_file(
         args.filename, SUPPORTED_ATTRIBUTES, SUPPORTED_FLAGS, SUPPORTED_CPU_ID
     )

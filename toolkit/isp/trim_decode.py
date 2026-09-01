@@ -12,8 +12,6 @@ __author__ onyettr
 # pylint: disable=unused-argument, line-too-long, invalid-name
 # pylint: disable=consider-using-f-string, f-string-without-interpolation
 import struct
-
-# import json
 from isp_print import isp_print_color
 
 
@@ -21,7 +19,12 @@ class MfrDataTrimDecoder:
     """Manufactoring decoder, display class"""
 
     def __init__(
-        self, fuse_data_0x154, fuse_data_0x158, fuse_data_0x15C, fuse_data_0x160
+        self,
+        fuse_data_0x154,
+        fuse_data_0x158,
+        fuse_data_0x15C,
+        fuse_data_0x160,
+        device_variant,
     ):
         """
         Initializes the decoder with raw 32-bit fuse data for each address.
@@ -36,8 +39,9 @@ class MfrDataTrimDecoder:
         self.fuse_0x158 = fuse_data_0x158
         self.fuse_0x15C = fuse_data_0x15C
         self.fuse_0x160 = fuse_data_0x160
+        self.device_variant = device_variant
 
-    def decode_0x154(self):
+    def decode_and_print_0x154(self):
         """Decodes the fields from fuse address 0x154."""
         decoded_data = {}
         # 0x154:31 FT_Valid_data (1 bit)
@@ -50,9 +54,31 @@ class MfrDataTrimDecoder:
         decoded_data["ADC_VREF"] = (self.fuse_0x154 >> 16) & 0xFF
         # 0x154:15-0 ADC24 Offset (16 bits)
         decoded_data["ADC24_Offset"] = self.fuse_0x154 & 0xFFFF
+
+        isp_print_color("blue", "\t** Offset 0x154\n")
+        isp_print_color(
+            "blue",
+            f"\t\t+ Valid Data     [31:31] = {decoded_data['Valid_data']:1d}\t(0x{decoded_data['Valid_data']:X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ BOR Abort      [30:30] = {decoded_data['BOR_Abort']:1d}\t(0x{decoded_data['BOR_Abort']:X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ Temp Sensor    [29:24] = {decoded_data['Temp_Sensor']:d}\t(0x{decoded_data['Temp_Sensor']:02X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ ADC VREF       [23:16] = {decoded_data['ADC_VREF']:d}\t(0x{decoded_data['ADC_VREF']:02X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ ADC24 Offset   [15:0 ] = {decoded_data['ADC24_Offset']:d}\t(0x{decoded_data['ADC24_Offset']:04X})\n",
+        )
         return decoded_data
 
-    def decode_0x158(self):
+    def decode_and_print_0x158(self):
         """Decodes the fields from fuse address 0x158."""
         decoded_data = {}
         # 0x158:31-28 AON LDO (4 bits)
@@ -71,9 +97,48 @@ class MfrDataTrimDecoder:
         decoded_data["Reserved_0x158"] = (self.fuse_0x158 >> 8) & 0x7
         # 0x158:7-0 DCDC pre-trim (8 bits)
         decoded_data["DCDC_pre_trim"] = self.fuse_0x158 & 0xFF
-        return decoded_data
 
-    def decode_0x15C(self):
+        isp_print_color("blue", "\t** Offset 0x158\n")
+        isp_print_color(
+            "blue",
+            f"\t\t+ AON LDO        [31:28] = {decoded_data['AON_LDO']:d}\t(0x{decoded_data['AON_LDO']:X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ RET LDO        [27:24] = {decoded_data['RET_LDO']:d}\t(0x{decoded_data['RET_LDO']:X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ PMU BG         [23:20] = {decoded_data['PMU_BG']:d}\t(0x{decoded_data['PMU_BG']:X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ PERIPH BG      [19:16] = {decoded_data['PERIPH_BG']:d}\t(0x{decoded_data['PERIPH_BG']:X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ AON BG<4:1>    [15:12] = {decoded_data['AON_BG_4_1']:d}\t(0x{decoded_data['AON_BG_4_1']:X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ AON BG<0>      [11:11] = {decoded_data['AON_BG_0']:d}\t(0x{decoded_data['AON_BG_0']:X})\n",
+        )
+        # Combine AON BG fields
+        aon_bg_full = (decoded_data["AON_BG_4_1"] << 1) | decoded_data["AON_BG_0"]
+        isp_print_color(
+            "blue",
+            f"\t\t+ AON BG (full)  [15:11] = {aon_bg_full:d}\t(0x{aon_bg_full:02X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ Reserved       [10: 8] = {decoded_data['Reserved_0x158']:d}\t(0x{decoded_data['Reserved_0x158']:X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ DCDC Pre-trim  [ 7: 0] = {decoded_data['DCDC_pre_trim']:d}\t(0x{decoded_data['DCDC_pre_trim']:02X})\n",
+        )
+
+    def decode_and_print_0x15C(self):
         """Decodes the fields from fuse address 0x15C."""
         decoded_data = {}
         # 0x15C:31-26 HFRC 76.8 MHz (6 bits)
@@ -84,9 +149,62 @@ class MfrDataTrimDecoder:
         decoded_data["LFRC"] = (self.fuse_0x15C >> 10) & 0x3F
         # 0x15C:9-0 ADC121 Offset (10 bits)
         decoded_data["ADC121_Offset"] = self.fuse_0x15C & 0x3FF
-        return decoded_data
 
-    def decode_0x160(self):
+        isp_print_color("blue", "\t** Offset 0x15C\n")
+        isp_print_color(
+            "blue",
+            f"\t\t+ HFRC 76.8MHz   [31:26] = {decoded_data['HFRC']:d}\t(0x{decoded_data['HFRC']:02X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ ADC120 Offset  [25:16] = {decoded_data['ADC120_Offset']:d}\t(0x{decoded_data['ADC120_Offset']:03X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ LFRC 32.7kHz   [15:10] = {decoded_data['LFRC']:d}\t(0x{decoded_data['LFRC']:02X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ ADC121 Offset  [ 9: 0] = {decoded_data['ADC121_Offset']:d}\t(0x{decoded_data['ADC121_Offset']:03X})\n",
+        )
+
+    def decode_and_print_0x160(self):
+        if self.device_variant != "B1E1C":
+            self._decode_and_print_0x160_ensemble()
+        if self.device_variant != "ENSEMBLE":
+            self._decode_and_print_0x160_b1e1c()
+
+    def _decode_and_print_0x160_b1e1c(self):
+        """Decodes the fields from fuse address 0x160."""
+        decoded_data = {}
+        # 0x160:31-26 DCDC post-trim control value (6 bits)
+        decoded_data["DCDC_post_trim"] = (self.fuse_0x160 >> 26) & 0x3F
+        # 0x160:25-24 TON control (2 bits)
+        decoded_data["TON control"] = (self.fuse_0x160 >> 24) & 0x3
+        # 0x160:23-20 TON calibration (4 bits)
+        decoded_data["TON calibration"] = (self.fuse_0x160 >> 20) & 0xF
+        # 0x160:19-12 DAC1 (8 bits)
+        decoded_data["DAC1_Offset"] = (self.fuse_0x160 >> 12) & 0xFF
+
+        isp_print_color("blue", "\t** Offset 0x160\n")
+        isp_print_color(
+            "blue",
+            f"\t\t+ DCDC Post-trim [31:26] = {decoded_data['DCDC_post_trim']:d}\t(0x{decoded_data['DCDC_post_trim']:02X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ TON control    [25:24] = {decoded_data['TON control']:d}\t(0x{decoded_data['TON control']:01X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ TON calib      [23:20] = {decoded_data['TON calibration']:d}\t(0x{decoded_data['TON calibration']:01X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ DAC1 Offset    [19:12] = {decoded_data['DAC1_Offset']:d}\t(0x{decoded_data['DAC1_Offset']:02X})\n",
+        )
+
+    def _decode_and_print_0x160_ensemble(self):
         """Decodes the fields from fuse address 0x160."""
         decoded_data = {}
         # 0x160:31-26 DCDC post-trim control value (6 bits)
@@ -97,16 +215,24 @@ class MfrDataTrimDecoder:
         decoded_data["DAC1_Offset"] = (self.fuse_0x160 >> 8) & 0xFF
         # 0x160:7-0 DAC2 Offset (8 bits)
         decoded_data["DAC2_Offset"] = self.fuse_0x160 & 0xFF
-        return decoded_data
 
-    def decode_all(self):
-        """Decodes all fields from all provided fuse addresses."""
-        all_decoded_data = {}
-        all_decoded_data["0x154"] = self.decode_0x154()
-        all_decoded_data["0x158"] = self.decode_0x158()
-        all_decoded_data["0x15C"] = self.decode_0x15C()
-        all_decoded_data["0x160"] = self.decode_0x160()
-        return all_decoded_data
+        isp_print_color("blue", "\t** Offset 0x160\n")
+        isp_print_color(
+            "blue",
+            f"\t\t+ DCDC Post-trim [31:26] = {decoded_data['DCDC_post_trim']:d}\t(0x{decoded_data['DCDC_post_trim']:02X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ ADC122 Offset  [25:16] = {decoded_data['ADC122_Offset']:d}\t(0x{decoded_data['ADC122_Offset']:03X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ DAC1 Offset    [15: 8] = {decoded_data['DAC1_Offset']:d}\t(0x{decoded_data['DAC1_Offset']:02X})\n",
+        )
+        isp_print_color(
+            "blue",
+            f"\t\t+ DAC2 Offset    [ 7: 0] = {decoded_data['DAC2_Offset']:d}\t(0x{decoded_data['DAC2_Offset']:02X})\n",
+        )
 
     def get_valid_data_state(self):
         """
@@ -136,153 +262,8 @@ class MfrDataTrimDecoder:
         state = self.get_valid_data_state()
         return "Valid" if state == 1 else "Invalid"
 
-    def _print_0x154_details(self, fields, raw_val=None):
-        """Print detailed breakdown for address 0x154"""
 
-        isp_print_color("blue", "\t** Offset 0x154\n")
-        isp_print_color(
-            "blue",
-            f"\t\t+ Valid Data     [31:31] = {fields['Valid_data']:1d}\t(0x{fields['Valid_data']:X})\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ BOR Abort      [30:30] = {fields['BOR_Abort']:1d}\t(0x{fields['BOR_Abort']:X})\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ Temp Sensor    [29:24] = {fields['Temp_Sensor']:d}\t(0x{fields['Temp_Sensor']:02X})\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ ADC VREF       [23:16] = {fields['ADC_VREF']:d}\t(0x{fields['ADC_VREF']:02X})\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ ADC24 Offset   [15:0 ] = {fields['ADC24_Offset']:d}\t(0x{fields['ADC24_Offset']:04X})\n",
-        )
-
-    #        isp_print_color('blue',
-    #                        f"\t\tBit Visualization:\n")
-    #        isp_print_color('blue',
-    #                        f"\t\t  31 30 29-24   23-16     15-0\n")
-    #        isp_print_color('blue',
-    #                        f"\t\t  |  |  |       |         |\n")
-    #        isp_print_color('blue',
-    #                        f"\t\t  {fields['Valid_data']:1d}  {fields['BOR_Abort']:1d}  {fields['Temp_Sensor']:02X}      {fields['ADC_VREF']:02X}        {fields['ADC24_Offset']:04X}\n")
-
-    def _print_0x158_details(self, fields, raw_val=None):
-        """Print detailed breakdown for address 0x158"""
-        #        print(f"\nField Breakdown:")
-        isp_print_color("blue", "\t** Offset 0x158\n")
-        isp_print_color(
-            "blue",
-            f"\t\t+ AON LDO        [31:28] = {fields['AON_LDO']:d}\t(0x{fields['AON_LDO']:X})\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ RET LDO        [27:24] = {fields['RET_LDO']:d}\t(0x{fields['RET_LDO']:X})\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ PMU BG         [23:20] = {fields['PMU_BG']:d}\t(0x{fields['PMU_BG']:X})\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ PERIPH BG      [19:16] = {fields['PERIPH_BG']:d}\t(0x{fields['PERIPH_BG']:X})\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ AON BG<4:1>    [15:12] = {fields['AON_BG_4_1']:d}\t(0x{fields['AON_BG_4_1']:X})\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ AON BG<0>      [11:11] = {fields['AON_BG_0']:d}\t(0x{fields['AON_BG_0']:X})\n",
-        )
-        # Combine AON BG fields
-        aon_bg_full = (fields["AON_BG_4_1"] << 1) | fields["AON_BG_0"]
-        #        print(f"\nCombined Fields:")
-        isp_print_color(
-            "blue",
-            f"\t\t+ AON BG (full)  [15:11] = {aon_bg_full:d}\t(0x{aon_bg_full:02X})\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ Reserved       [10: 8] = {fields['Reserved_0x158']:d}\t(0x{fields['Reserved_0x158']:X})\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ DCDC Pre-trim  [ 7: 0] = {fields['DCDC_pre_trim']:d}\t(0x{fields['DCDC_pre_trim']:02X})\n",
-        )
-
-    def _print_0x15C_details(self, fields, raw_val=None):
-        """Print detailed breakdown for address 0x15C"""
-        #        print(f"\nField Breakdown:")
-        isp_print_color("blue", "\t** Offset 0x15C\n")
-        isp_print_color(
-            "blue",
-            f"\t\t+ HFRC 76.8MHz   [31:26] = {fields['HFRC']:d}\t(0x{fields['HFRC']:02X})\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ ADC120 Offset  [25:16] = {fields['ADC120_Offset']:d}\t(0x{fields['ADC120_Offset']:03X}\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ LFRC 32.7kHz   [15:10] = {fields['LFRC']:d}\t(0x{fields['LFRC']:02X})\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ ADC121 Offset  [ 9: 0] = {fields['ADC121_Offset']:d}\t(0x{fields['ADC121_Offset']:03X})\n",
-        )
-
-    def _print_0x160_details(self, fields, raw_val=None):
-        """Print detailed breakdown for address 0x160"""
-        #        print(f"\nField Breakdown:")
-        isp_print_color("blue", "\t** Offset 0x160\n")
-        isp_print_color(
-            "blue",
-            f"\t\t+ DCDC Post-trim [31:26] = {fields['DCDC_post_trim']:d}\t(0x{fields['DCDC_post_trim']:02X})\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ ADC122 Offset  [25:16] = {fields['ADC122_Offset']:d}\t(0x{fields['ADC122_Offset']:03X})\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ DAC1 Offset    [15: 8] = {fields['DAC1_Offset']:d}\t(0x{fields['DAC1_Offset']:02X})\n",
-        )
-        isp_print_color(
-            "blue",
-            f"\t\t+ DAC2 Offset    [ 7: 0] = {fields['DAC2_Offset']:d}\t(0x{fields['DAC2_Offset']:02X})\n",
-        )
-
-    def print_detailed_decode(self, decoded_data, raw_values=None):
-        """Print detailed decode with register values and bit positions"""
-
-
-#        for addr_str, fields in decoded_data.items():
-#            addr_int = int(addr_str, 16)
-#            raw_val = raw_values.get(addr_int, 0) if raw_values else 0
-#            self._print_0x154_details(fields, 0)
-#           print(f"\n{'='*60}")
-#           print(f"ADDRESS {addr_str} (Raw Value: 0x{raw_val:08X} = {raw_val})")
-#            print(f"{'='*60}")
-#            print(f"Binary: {raw_val:032b}")
-#            print(f"        31  27  23  19  15  11   7   3")
-#            print(f"         |   |   |   |   |   |   |   |")
-
-# Print each field with bit positions
-#            if addr_str == '0x154':
-#                self._print_0x154_details(fields, raw_val)
-#            elif addr_str == '0x158':
-#                self._print_0x158_details(fields, raw_val)
-#            elif addr_str == '0x15C':
-#                self._print_0x15C_details(fields, raw_val)
-#            elif addr_str == '0x160':
-#                self._print_0x160_details(fields, raw_val)
-
-
-def trim_decoder(device_data):
+def trim_decoder(device_data, device_variant):
     """
     trim_decoder interface to ISP
 
@@ -319,27 +300,21 @@ def trim_decoder(device_data):
 
     # Initialize the decoder with the extracted fuse data
     decoder = MfrDataTrimDecoder(
-        fuse_data_0x154, fuse_data_0x158, fuse_data_0x15C, fuse_data_0x160
+        fuse_data_0x154,
+        fuse_data_0x158,
+        fuse_data_0x15C,
+        fuse_data_0x160,
+        device_variant,
     )
 
     # Check if device is Analogue Trimmed or not
     if decoder.is_valid_data() is False:
         return
 
-    # Decode all fields
-    # decoded_results = decoder.decode_all()
-    # decoded_results = decoder.decode_0x154()
-    # print(json.dumps(decoded_results, indent=4))
-
-    decoded_0x154 = decoder.decode_0x154()
-    decoded_0x158 = decoder.decode_0x158()
-    decoded_0x15C = decoder.decode_0x15C()
-    decoded_0x160 = decoder.decode_0x160()
-
-    decoder._print_0x154_details(decoded_0x154)
-    decoder._print_0x158_details(decoded_0x158)
-    decoder._print_0x15C_details(decoded_0x15C)
-    decoder._print_0x160_details(decoded_0x160)
+    decoder.decode_and_print_0x154()
+    decoder.decode_and_print_0x158()
+    decoder.decode_and_print_0x15C()
+    decoder.decode_and_print_0x160()
 
 
 if __name__ == "__main__":

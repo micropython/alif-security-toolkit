@@ -27,6 +27,7 @@ from power_decode import display_power_info
 from clock_decode import display_clock_info
 from ospi_decode import ospi_data_decode
 from otp import display_otp_info
+from key_decode import display_key_storage
 # from serom_trace import *
 
 # from seram_trace import trace_buffer_decode
@@ -61,8 +62,8 @@ isp_command_lookup = {
     ISP_COMMAND_SET: "COMMAND_SET           ",
     ISP_COMMAND_DMPU: "COMMAND_DMPU          ",
     ISP_COMMAND_SRAM_WRITE: "COMMAND SRAM WRITE    ",
-    ISP_COMMAND_VERIFY_AND_EXECUTE: "ISP_COMMAND_VERIFY_AND_EXECUTE",
-    ISP_COMMAND_OSPI_WRITE: "ISP_COMMAND_OSPI_WRITE",
+    ISP_COMMAND_VERIFY_AND_EXECUTE: "COMMAND_VERIFY_AND_EXECUTE",
+    ISP_COMMAND_OSPI_WRITE: "COMMAND_OSPI_WRITE",
     ISP_COMMAND_DATA_RESPONSE: "COMMAND_DATA_RESPONSE ",
     ISP_COMMAND_ACK: "COMMAND_ACK           ",
     ISP_COMMAND_NAK: "COMMAND_NAK           ",
@@ -89,6 +90,7 @@ isp_subcommand_lookup = {
     ISP_GET_ECC_KEY: "GET_ECC_KEY           ",
     ISP_GET_FIREWALL_CONFIG: "GET_FIREWALL_CONFIG   ",
     ISP_GET_OSPI_PARAMETERS: "GET_OSPI_PARAMETERS   ",
+    ISP_GET_KEY_MANAGEMENT: "GET_KEY_MANAGEMENT    ",
     ISP_SET_PRINTING_ENABLE: "SET_PRINTING_ENABLE   ",
     ISP_SET_PRINTING_DISABLE: "SET_PRINTING_DISABLE  ",
     ISP_SET_LOGGING_ENABLE: "SET_LOGGING_ENABLE    ",
@@ -240,7 +242,7 @@ class CtrlCHandler:
 
     def Handler(self, signal_number, frame):
         """
-        Handle the interupt signal
+        Handle the interrupt signal
         """
         signal.signal(signal.SIGINT, signal.SIG_DFL)
         self.running = True
@@ -427,7 +429,7 @@ def isp_wait(isp):
 
 def isp_signal(isp):
     """
-    tigeger signal to wait
+    trigger signal to wait
     """
     isp.eventFlag.set()  # tell TX we are done
 
@@ -491,7 +493,7 @@ def isp_test_target(baud_rate, isp):
     isp_test_target
 
     This command is similar to isp_start() but it does NOT exit
-    when the target did not respond...Int rather resturns:
+    when the target did not respond...Int rather returns:
      1 - when target responded
     -1 - when target did not respond
     """
@@ -703,7 +705,7 @@ def isp_enquiry(isp):
 def isp_show_maintenance_mode(isp, maintenance_mode):
     """
     isp_show_maintenance_mode
-    - disply the maintence mode status
+    - disply the maintenance mode status
     """
     Maintenance_string = "Enabled" if (maintenance_mode == 1) else "Disabled "
     isp_print_color("blue", "Maintenance Mode = " + Maintenance_string)
@@ -732,12 +734,11 @@ def isp_get_maintenance_status(isp):
 
 
 def isp_get_revision(isp):
+    """
+    isp_get_revision handler
+    """
     # we will add the source (SEROM or SERAM)
     VALID_DEVICE_REVISIONS_FOR_OSPI = {0x2A0, 0x2A1, 0x3A0}
-
-    """
-        isp_enquiry
-    """
     message = isp_build_packet(isp, ISP_COMMAND_ENQUIRY)
     if len(message) == 0:
         return
@@ -750,9 +751,6 @@ def isp_get_revision(isp):
         if state & ISP_SOURCE_SERAM:
             isp_print_color("blue", "SERAM\n")
 
-    """
-        isp_get_revision handler
-    """
     message = isp_build_packet(isp, ISP_COMMAND_GET, [ISP_GET_REVISION])
 
     if len(message) == 0:
@@ -784,6 +782,9 @@ def isp_get_baud_rate(isp):
     """
     baud_rate = 0
     message = isp_build_packet(isp, ISP_COMMAND_GET_BAUD_RATE)
+    if len(message) == 0:
+        return
+
     baud_rate = int.from_bytes(message[2:6], "little")
     isp_print_color("blue", baud_rate)
     print(" ")
@@ -852,7 +853,7 @@ def isp_get_power_data(isp):
 
 def isp_get_clock_data(isp):
     """
-    isp_get_power_data
+    isp_get_clock_data
     """
 
     # specify a non-zero timeout as getting clocks data may take some time
@@ -912,7 +913,7 @@ def isp_get_cpu_status(isp):
 
     ISP_DATA_RESPONSE packet for return data
 
-     CPU_ID   Booted  Boot Addess
+     CPU_ID   Booted  Boot Address
     <1-byte> <1-byte>  <4-bytes>   = 6-bytes
     """
     message = isp_build_packet(isp, ISP_COMMAND_GET, [ISP_GET_CPU_STATUS])
@@ -1064,353 +1065,6 @@ def isp_get_address(isp, address):
             print(hex(value))
 
 
-def isp_set_address(isp, address, data):
-    """
-    isp_set_address
-    """
-    delay = 0
-    message = isp_build_packet(
-        isp, ISP_COMMAND_SET, [ISP_SET_POKE_ADDRESS, address, data], delay
-    )
-    if len(message) != 0:
-        cmd = message[ISP_PACKET_COMMAND_FIELD]
-
-        if cmd == ISP_COMMAND_DATA_RESPONSE:
-            #            length = message[ISP_PACKET_LENGTH_FIELD]
-            value = int.from_bytes(message[ISP_PACKET_DATA_FIELD:6], "little")
-            print(hex(value))
-
-
-def isp_set_log_enable(isp, enable):
-    """
-    SET capability - LOGGER enable/disable
-    """
-    #    delay = 0
-    if enable:
-        response = isp_build_packet(isp, ISP_COMMAND_SET, [ISP_SET_LOGGING_ENABLE])
-    else:
-        response = isp_build_packet(isp, ISP_COMMAND_SET, [ISP_SET_LOGGING_DISABLE])
-
-    if len(response) == 0:
-        return
-
-    command = response[ISP_PACKET_COMMAND_FIELD]
-    if command == ISP_COMMAND_NAK:
-        error_string = error_lookup.get(response[ISP_PACKET_DATA_FIELD])
-        if not error_string:
-            error_string = "UNKNOWN"
-        isp_print_color("blue", "[ERROR] {}".format(error_string))
-        print(" ")
-        return  # Exit this function
-
-    return
-
-
-def isp_set_print_enable(isp, enable):
-    """
-    SET capability - PRINT enable/disable
-    """
-    delay = 0
-    if enable:
-        response = isp_build_packet(isp, ISP_COMMAND_SET, [ISP_SET_PRINTING_ENABLE])
-    else:
-        response = isp_build_packet(isp, ISP_COMMAND_SET, [ISP_SET_PRINTING_DISABLE])
-
-    if len(response) == 0:
-        return
-
-    command = response[ISP_PACKET_COMMAND_FIELD]
-    if command == ISP_COMMAND_NAK:
-        error_string = error_lookup.get(response[ISP_PACKET_DATA_FIELD])
-        if not error_string:
-            error_string = "UNKNOWN"
-        isp_print_color("blue", "[ERROR] {}".format(error_string))
-        print(" ")
-        return  # Exit this function
-
-    return
-
-
-def isp_get(isp, getobject):
-    """
-    isp_get
-        get an "object"
-    """
-    isp_build_packet(isp, ISP_COMMAND_GET)
-
-
-def isp_set(isp, getobject):
-    """
-    isp_set
-        set an attribute "object"
-    """
-    isp_build_packet(isp, ISP_COMMAND_SET)
-
-
-def isp_write_otp(isp, word_offset, number_of_words, word):
-    """
-        isp_write_otp
-            write word data to otp @ word_offset
-        NOTE: SERAM does not support this feature
-    Args:
-        isp
-        word_offset       OTP address
-        number-of_words   number of words to set (in this packet)
-        word              data to write
-    Returns:
-        None
-    """
-    response = isp_build_packet(
-        isp, ISP_COMMAND_OTP_WRITE, [number_of_words, word_offset, word]
-    )
-    if len(response) == 0:
-        return
-
-
-def isp_burn_ospi_otp(isp, data, delay=0):
-    """
-        isp_burn_ospi_otp
-            write  data to OSPI OTP configuration
-    Args:
-        isp
-        data             data to write
-        delay            delay time override
-    Returns:
-        None
-    """
-    message = isp_build_packet(
-        isp, ISP_COMMAND_SET, [ISP_SET_OSPI_OTP_PARAMETERS, data], delay
-    )
-
-    if len(message) != 0:
-        cmd = message[ISP_PACKET_COMMAND_FIELD]
-
-        if cmd == ISP_COMMAND_DATA_RESPONSE:
-            value = int.from_bytes(message[ISP_PACKET_DATA_FIELD:6], "little")
-            print(value)
-
-    else:
-        print("[ERROR] Target did not respond")
-        sys.exit(EXIT_WITH_ERROR)
-
-
-def isp_read_otp(isp, word_offset):
-    """
-    isp_read_otp
-        retrieve otp @ word_offset
-    """
-    response = isp_build_packet(isp, ISP_COMMAND_OTP_READ, [int(word_offset)])
-    if len(response) == 0:
-        return
-
-    command = response[ISP_PACKET_COMMAND_FIELD]
-    if command == ISP_COMMAND_NAK:
-        error_string = error_lookup.get(response[ISP_PACKET_DATA_FIELD])
-        if not error_string:
-            error_string = "UNKNOWN"
-        otp_value = int.from_bytes(response[2:6], "little")
-        isp_print_color("blue", "[ERROR] 0x{:04x} {}".format(word_offset, error_string))
-        print(" ")
-
-        return  # Exit this function
-
-    if command != ISP_COMMAND_DATA_RESPONSE:
-        isp_print_color("blue", "[ERROR] No response")
-        return None  # Exit this function
-
-    # Display the OTP data
-    display_otp_info(word_offset, response)
-
-
-def isp_set_baud_rate(isp, baud_rate):
-    """
-    isp_get_baud_rate
-    """
-    isp_build_packet(isp, ISP_COMMAND_SET_BAUD_RATE, [baud_rate])
-
-
-def isp_set_host_baud_rate(isp, baud_rate):
-    """
-    set the host baud rate
-    """
-    isp.setBaudRate(baud_rate)
-
-
-def isp_mram_write(isp, offset, data):
-    """
-    isp_Mram_Write
-    - send data to write to the MRAM - SEROM style
-    (used by icv-recovery.py and recovery.py)
-    """
-    response = isp_build_packet(isp, ISP_COMMAND_MRAM_WRITE, [offset, bytearray(data)])
-    if len(response) > ISP_PACKET_HEADER_LENGTH:
-        command = response[ISP_PACKET_COMMAND_FIELD]
-        if command == ISP_COMMAND_NAK:  # NACK, DO NOT CONTINUE
-            print("ERROR: There was an error in the recovery process")
-            sys.exit(EXIT_WITH_ERROR)
-    else:
-        print(
-            "ERROR: There was an error in the recovery process ( invalid ISP PACKET HEADER LENGTH)!"
-        )
-        sys.exit(EXIT_WITH_ERROR)
-
-
-def isp_ospi_write(isp, offset, data):
-    """
-    isp_Ospi_Write
-    - send data to write to the OSPI - SEROM style
-    (used by icv-recovery.py and recovery.py)
-    """
-    response = isp_build_packet(isp, ISP_COMMAND_OSPI_WRITE, [offset, bytearray(data)])
-    if len(response) > ISP_PACKET_HEADER_LENGTH:
-        command = response[ISP_PACKET_COMMAND_FIELD]
-        if command == ISP_COMMAND_NAK:  # NACK, DO NOT CONTINUE
-            print("ERROR: There was an error in the recovery process")
-            sys.exit(EXIT_WITH_ERROR)
-    else:
-        print(
-            "ERROR: There was an error in the recovery process ( invalid ISP PACKET HEADER LENGTH)!"
-        )
-        sys.exit(EXIT_WITH_ERROR)
-
-
-def isp_read_mram(isp, word_offset=0x0):
-    """
-    isp_read_mram
-        retrieve mram @ word_offset
-    """
-    response = isp_build_packet(isp, ISP_COMMAND_MRAM_READ, [int(word_offset), b"\x10"])
-    if len(response) == 0:
-        return
-
-    command = response[ISP_PACKET_COMMAND_FIELD]
-    if command == ISP_COMMAND_NAK:
-        error_string = error_lookup.get(response[ISP_PACKET_DATA_FIELD])
-        if not error_string:
-            error_string = "UNKNOWN"
-        isp_print_color("blue", "[ERROR] 0x{:04x} {}".format(word_offset, error_string))
-        print(" ")
-    if command != ISP_COMMAND_DATA_RESPONSE:
-        return None
-
-    # write out the 4 int32 values of the MRAM line
-    isp_print_color("blue", "[0x{:x}] ".format(word_offset))
-    for each_word in range(2, 18, 4):
-        mram_value = response[each_word : each_word + 4]
-        value = int.from_bytes(mram_value, byteorder="little")
-        isp_print_color("blue", "0x{:08x} ".format(value))
-    print(" ")
-
-
-def isp_mram_erase(isp, address, size=0, pattern=0x00000000):
-    """
-    isp_erase_mram
-    - erase ATOC memory from <address> for <size> with <pattern>
-    """
-    delay = 0
-    if size >= 1048576:  # ACK will take some time at this size
-        delay = 20
-    isp_build_packet(isp, ISP_COMMAND_ERASE_MRAM, [address, size, pattern], delay)
-
-
-def isp_ospi_recovery_init(isp):
-    """
-    SEROM ISP Command
-    """
-    delay = 0
-
-    isp_build_packet(isp, ISP_COMMAND_SET, [ISP_SET_INIT_OSPI], delay)
-
-
-def isp_ospi_recovery_toggle_flag(isp):
-    """
-    SEROM ISP Command for toggling the ospi_flag
-    """
-    delay = 0
-
-    isp_build_packet(isp, ISP_COMMAND_SET, [ISP_SET_OSPI_FLAG], delay)
-
-
-def isp_set_ospi_settings(isp, data):
-    """
-    isp_Ospi_Write
-    - send data to write to the OSPI - SEROM style
-    (used by icv-recovery.py and recovery.py)
-    """
-    response = isp_build_packet(
-        isp, ISP_COMMAND_SET, [ISP_SET_OSPI_SETTINGS, bytearray(data)]
-    )
-
-    if len(response) > ISP_PACKET_HEADER_LENGTH:
-        command = response[ISP_PACKET_COMMAND_FIELD]
-        if command == ISP_COMMAND_NAK:  # NACK, DO NOT CONTINUE
-            print("ERROR: There was an error in the recovery process")
-            sys.exit(EXIT_WITH_ERROR)
-    else:
-        print(
-            "ERROR: There was an error in the recovery process ( invalid ISP PACKET HEADER LENGTH)!"
-        )
-        sys.exit(EXIT_WITH_ERROR)
-
-
-def isp_ospi_recovery_erase_chip(isp):
-    """
-    SEROM ISP Command
-    """
-    delay = 0
-
-    isp_build_packet(isp, ISP_COMMAND_SET, [ISP_SET_OSPI_ERASE_CHIP], delay)
-
-
-def isp_ospi_recovery_sector_erase(isp, offset, sector_size=ERASE_SECTOR_SIZE_32K):
-    """
-    Erase OSPI memory sector at specified offset.
-
-    Sends an ISP command to erase a sector of OSPI memory starting at the
-    given offset with the specified sector size and fill pattern.
-
-    Args:
-        isp: ISP serial port object for communication with the device
-        offset (int): Starting offset address in OSPI memory to erase
-        sector_size (int, optional): Size of sector to erase in bytes.
-            Defaults to ERASE_SECTOR_SIZE_32K (32KB sectors)
-
-    Returns:
-        None
-
-    Note:
-        This operation includes a 2000ms delay to allow for erase completion.
-        The erase operation is performed via ISP_COMMAND_SET with
-        ISP_SET_OSPI_ERASE_SECTOR command.
-    """
-    delay = 2000  # Larger delay just in case
-
-    # Create and send the sub-command
-    isp_build_packet(
-        isp, ISP_COMMAND_SET, [ISP_SET_OSPI_ERASE_SECTOR, offset, sector_size], delay
-    )
-
-
-def isp_sram_write(isp, offset, data):
-    """
-    isp_Sram_Write
-    - send data to write to the SE RAM - SEROM only
-    (used by recovery-execute-package.py)
-    """
-
-    # print("* write to offset ", hex(offset))
-    # print("* data: ", data)
-    isp_build_packet(isp, ISP_COMMAND_SRAM_WRITE, [offset, bytearray(data)])
-
-
-def isp_set_maintenance_flag(isp):
-    """
-    isp_set_maintenance_flag
-    - Send Command to set the maintenance flag on the target
-    """
-    isp_build_packet(isp, ISP_COMMAND_SET_MAINTENANCE_FLAG)
-
-
 def isp_get_log_data(isp):
     """
     isp_get_log_data
@@ -1465,11 +1119,28 @@ def isp_get_ecc_key(isp):
 
     command = message[ISP_PACKET_COMMAND_FIELD]
     if command != ISP_COMMAND_DATA_RESPONSE:
-        print("ECC query error")
+        print("[ERROR] ECC query error")
         return
 
     ecc_key = message[2:66]
-    print("ECC key (HEX): ", "".join("{:02X}".format(n) for n in ecc_key))
+    print(f"ECC key (HEX): {''.join(f'{n:02X}' for n in ecc_key)}")
+
+
+def isp_get_key_management_data(isp):
+    """
+    isp_get_key_management
+    """
+    message = isp_build_packet(isp, ISP_COMMAND_GET, [ISP_GET_KEY_MANAGEMENT])
+    if len(message) == 0:
+        return
+
+    command = message[ISP_PACKET_COMMAND_FIELD]
+    if command != ISP_COMMAND_DATA_RESPONSE:
+        print("[ERROR] Key Management query error")
+        return
+
+    #    print(message)
+    display_key_storage(message[2::])
 
 
 def isp_get_firewall_config(isp):
@@ -1492,3 +1163,350 @@ def isp_get_firewall_config(isp):
             continue
         data = int.from_bytes(firewall_config[idx : idx + 2], "little")
         print("FC: " + str(data & 0xF) + " region: " + str((data & 0xFF0) >> 4))
+
+
+def isp_set_address(isp, address, data):
+    """
+    isp_set_address
+    """
+    delay = 0
+    message = isp_build_packet(
+        isp, ISP_COMMAND_SET, [ISP_SET_POKE_ADDRESS, address, data], delay
+    )
+    if len(message) != 0:
+        cmd = message[ISP_PACKET_COMMAND_FIELD]
+
+        if cmd == ISP_COMMAND_DATA_RESPONSE:
+            #            length = message[ISP_PACKET_LENGTH_FIELD]
+            value = int.from_bytes(message[ISP_PACKET_DATA_FIELD:6], "little")
+            print(hex(value))
+
+
+def isp_set_log_enable(isp, enable):
+    """
+    SET capability - LOGGER enable/disable
+    """
+    #    delay = 0
+    if enable:
+        response = isp_build_packet(isp, ISP_COMMAND_SET, [ISP_SET_LOGGING_ENABLE])
+    else:
+        response = isp_build_packet(isp, ISP_COMMAND_SET, [ISP_SET_LOGGING_DISABLE])
+
+    if len(response) == 0:
+        return
+
+    command = response[ISP_PACKET_COMMAND_FIELD]
+    if command == ISP_COMMAND_NAK:
+        error_string = error_lookup.get(response[ISP_PACKET_DATA_FIELD])
+        if not error_string:
+            error_string = "UNKNOWN"
+        isp_print_color("blue", f"[ERROR] {error_string}")
+        print(" ")
+        return  # Exit this function
+
+    return
+
+
+def isp_set_print_enable(isp, enable):
+    """
+    SET capability - PRINT enable/disable
+    """
+    delay = 0
+    if enable:
+        response = isp_build_packet(isp, ISP_COMMAND_SET, [ISP_SET_PRINTING_ENABLE])
+    else:
+        response = isp_build_packet(isp, ISP_COMMAND_SET, [ISP_SET_PRINTING_DISABLE])
+
+    if len(response) == 0:
+        return
+
+    command = response[ISP_PACKET_COMMAND_FIELD]
+    if command == ISP_COMMAND_NAK:
+        error_string = error_lookup.get(response[ISP_PACKET_DATA_FIELD])
+        if not error_string:
+            error_string = "UNKNOWN"
+        isp_print_color("blue", f"[ERROR] {error_string}")
+        print(" ")
+        return  # Exit this function
+
+    return
+
+
+def isp_get(isp, getobject):
+    """
+    isp_get
+        get an "object"
+    """
+    isp_build_packet(isp, ISP_COMMAND_GET)
+
+
+def isp_set(isp, getobject):
+    """
+    isp_set
+        set an attribute "object"
+    """
+    isp_build_packet(isp, ISP_COMMAND_SET)
+
+
+def isp_write_otp(isp, word_offset, number_of_words, word):
+    """
+        isp_write_otp
+            write word data to otp @ word_offset
+        NOTE: SERAM does not support this feature
+    Args:
+        isp
+        word_offset       OTP address
+        number-of_words   number of words to set (in this packet)
+        word              data to write
+    Returns:
+        None
+    """
+    response = isp_build_packet(
+        isp, ISP_COMMAND_OTP_WRITE, [number_of_words, word_offset, word]
+    )
+    if len(response) == 0:
+        return
+
+
+def isp_read_otp(isp, word_offset):
+    """
+    isp_read_otp
+        retrieve otp @ word_offset
+    """
+    response = isp_build_packet(isp, ISP_COMMAND_OTP_READ, [int(word_offset)])
+    if len(response) == 0:
+        return
+
+    command = response[ISP_PACKET_COMMAND_FIELD]
+    if command == ISP_COMMAND_NAK:
+        error_string = error_lookup.get(response[ISP_PACKET_DATA_FIELD])
+        if not error_string:
+            error_string = "UNKNOWN"
+        otp_value = int.from_bytes(response[2:6], "little")
+        isp_print_color("blue", f"[ERROR] 0x{word_offset:04x} {error_string}")
+        print(" ")
+
+        return  # Exit this function
+
+    if command != ISP_COMMAND_DATA_RESPONSE:
+        isp_print_color("blue", "[ERROR] No response")
+        return None  # Exit this function
+
+    # Display the OTP data
+    display_otp_info(word_offset, response)
+
+
+def isp_burn_ospi_otp(isp, data, delay=0):
+    """
+        isp_burn_ospi_otp
+            write  data to OSPI OTP configuration
+    Args:
+        isp
+        data             data to write
+        delay            delay time override
+    Returns:
+        None
+    """
+    message = isp_build_packet(
+        isp, ISP_COMMAND_SET, [ISP_SET_OSPI_OTP_PARAMETERS, data], delay
+    )
+
+    if len(message) != 0:
+        cmd = message[ISP_PACKET_COMMAND_FIELD]
+
+        if cmd == ISP_COMMAND_DATA_RESPONSE:
+            value = int.from_bytes(message[ISP_PACKET_DATA_FIELD:6], "little")
+            print(value)
+
+    else:
+        print("[ERROR] Target did not respond")
+        sys.exit(EXIT_WITH_ERROR)
+
+
+def isp_set_baud_rate(isp, baud_rate):
+    """
+    isp_set_baud_rate
+    """
+    isp_build_packet(isp, ISP_COMMAND_SET_BAUD_RATE, [baud_rate])
+
+
+def isp_set_host_baud_rate(isp, baud_rate):
+    """
+    set the host baud rate
+    """
+    isp.setBaudRate(baud_rate)
+
+
+def isp_mram_write(isp, offset, data):
+    """
+    isp_Mram_Write
+    - send data to write to the MRAM - SEROM style
+    (used by icv-recovery.py and recovery.py)
+    """
+    response = isp_build_packet(isp, ISP_COMMAND_MRAM_WRITE, [offset, bytearray(data)])
+    if len(response) > ISP_PACKET_HEADER_LENGTH:
+        command = response[ISP_PACKET_COMMAND_FIELD]
+        if command == ISP_COMMAND_NAK:  # NACK, DO NOT CONTINUE
+            print("ERROR: There was an error in the recovery process")
+            sys.exit(EXIT_WITH_ERROR)
+    else:
+        print(
+            "ERROR: There was an error in the recovery process ( invalid ISP PACKET HEADER LENGTH)!"
+        )
+        sys.exit(EXIT_WITH_ERROR)
+
+
+def isp_read_mram(isp, word_offset=0x0):
+    """
+    isp_read_mram
+        retrieve mram @ word_offset
+    """
+    response = isp_build_packet(isp, ISP_COMMAND_MRAM_READ, [int(word_offset), b"\x10"])
+    if len(response) == 0:
+        return
+
+    command = response[ISP_PACKET_COMMAND_FIELD]
+    if command == ISP_COMMAND_NAK:
+        error_string = error_lookup.get(response[ISP_PACKET_DATA_FIELD])
+        if not error_string:
+            error_string = "UNKNOWN"
+        isp_print_color("blue", f"[ERROR] 0x{word_offset:04x} {error_string}")
+        print(" ")
+    if command != ISP_COMMAND_DATA_RESPONSE:
+        return None
+
+    # write out the 4 int32 values of the MRAM line
+    isp_print_color("blue", "[0x{:x}] ".format(word_offset))
+    for each_word in range(2, 18, 4):
+        mram_value = response[each_word : each_word + 4]
+        value = int.from_bytes(mram_value, byteorder="little")
+        isp_print_color("blue", "0x{:08x} ".format(value))
+    print(" ")
+
+
+def isp_mram_erase(isp, address, size=0, pattern=0x00000000):
+    """
+    isp_erase_mram
+    - erase ATOC memory from <address> for <size> with <pattern>
+    """
+    delay = 0
+    if size >= 1048576:  # ACK will take some time at this size
+        delay = 20
+    isp_build_packet(isp, ISP_COMMAND_ERASE_MRAM, [address, size, pattern], delay)
+
+
+def isp_ospi_recovery_init(isp):
+    """
+    SEROM ISP Command
+    """
+    delay = 0
+
+    isp_build_packet(isp, ISP_COMMAND_SET, [ISP_SET_INIT_OSPI], delay)
+
+
+def isp_ospi_recovery_toggle_flag(isp):
+    """
+    SEROM ISP Command for toggling the ospi_flag
+    """
+    delay = 0
+
+    isp_build_packet(isp, ISP_COMMAND_SET, [ISP_SET_OSPI_FLAG], delay)
+
+
+def isp_ospi_recovery_erase_chip(isp):
+    """
+    SEROM ISP Command
+    """
+    delay = 0
+
+    isp_build_packet(isp, ISP_COMMAND_SET, [ISP_SET_OSPI_ERASE_CHIP], delay)
+
+
+def isp_ospi_recovery_sector_erase(isp, offset, sector_size=ERASE_SECTOR_SIZE_32K):
+    """
+    Erase OSPI memory sector at specified offset.
+
+    Sends an ISP command to erase a sector of OSPI memory starting at the
+    given offset with the specified sector size and fill pattern.
+
+    Args:
+        isp: ISP serial port object for communication with the device
+        offset (int): Starting offset address in OSPI memory to erase
+        sector_size (int, optional): Size of sector to erase in bytes.
+            Defaults to ERASE_SECTOR_SIZE_32K (32KB sectors)
+
+    Returns:
+        None
+
+    Note:
+        This operation includes a 2000ms delay to allow for erase completion.
+        The erase operation is performed via ISP_COMMAND_SET with
+        ISP_SET_OSPI_ERASE_SECTOR command.
+    """
+    delay = 2000  # Larger delay just in case
+
+    # Create and send the sub-command
+    isp_build_packet(
+        isp, ISP_COMMAND_SET, [ISP_SET_OSPI_ERASE_SECTOR, offset, sector_size], delay
+    )
+
+
+def isp_ospi_write(isp, offset, data):
+    """
+    isp_Ospi_Write
+    - send data to write to the OSPI - SEROM style
+    (used by icv-recovery.py and recovery.py)
+    """
+    response = isp_build_packet(isp, ISP_COMMAND_OSPI_WRITE, [offset, bytearray(data)])
+    if len(response) > ISP_PACKET_HEADER_LENGTH:
+        command = response[ISP_PACKET_COMMAND_FIELD]
+        if command == ISP_COMMAND_NAK:  # NACK, DO NOT CONTINUE
+            print("ERROR: There was an error in the recovery process")
+            sys.exit(EXIT_WITH_ERROR)
+    else:
+        print(
+            "ERROR: There was an error in the recovery process ( invalid ISP PACKET HEADER LENGTH)!"
+        )
+        sys.exit(EXIT_WITH_ERROR)
+
+
+def isp_sram_write(isp, offset, data):
+    """
+    isp_Sram_Write
+    - send data to write to the SE RAM - SEROM only
+    (used by recovery-execute-package.py)
+    """
+
+    # print("* write to offset ", hex(offset))
+    # print("* data: ", data)
+    isp_build_packet(isp, ISP_COMMAND_SRAM_WRITE, [offset, bytearray(data)])
+
+
+def isp_set_ospi_settings(isp, data):
+    """
+    isp_ospi_Write
+    - send data to write to the OSPI - SEROM style
+    (used by icv-recovery.py and recovery.py)
+    """
+    response = isp_build_packet(
+        isp, ISP_COMMAND_SET, [ISP_SET_OSPI_SETTINGS, bytearray(data)]
+    )
+
+    if len(response) > ISP_PACKET_HEADER_LENGTH:
+        command = response[ISP_PACKET_COMMAND_FIELD]
+        if command == ISP_COMMAND_NAK:  # NACK, DO NOT CONTINUE
+            print("ERROR: There was an error in the recovery process")
+            sys.exit(EXIT_WITH_ERROR)
+    else:
+        print(
+            "ERROR: There was an error in the recovery process ( invalid ISP PACKET HEADER LENGTH)!"
+        )
+        sys.exit(EXIT_WITH_ERROR)
+
+
+def isp_set_maintenance_flag(isp):
+    """
+    isp_set_maintenance_flag
+    - Send Command to set the maintenance flag on the target
+    """
+    isp_build_packet(isp, ISP_COMMAND_SET_MAINTENANCE_FLAG)

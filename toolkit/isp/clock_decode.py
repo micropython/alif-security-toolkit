@@ -16,6 +16,15 @@ PLL_CLK_STATUS_XTAL_STARTED = 1 << 0
 PLL_CLK_STATUS_PLL_LOCKED = 1 << 1
 PLL_CLK_STATUS_SE_CLOCK_PLL = 1 << 2
 
+OSCILLATOR_SOURCE_RC = 0
+OSCILLATOR_SOURCE_XTAL = 1
+
+CLOCK_GET_STATUS_WORD = 0
+CLOCK_GET_SE_FREQ_WORD = 1
+CLOCK_GET_REGISTER_WORDS = 20
+CLOCK_GET_LF_SOURCE_WORD = CLOCK_GET_STATUS_WORD + 1 + 1 + CLOCK_GET_REGISTER_WORDS
+CLOCK_GET_LF_FREQ_WORD = CLOCK_GET_LF_SOURCE_WORD + 1
+
 CLOCK_FREQUENCY_800MHZ = 0
 CLOCK_FREQUENCY_400MHZ = 1
 CLOCK_FREQUENCY_300MHZ = 2
@@ -182,6 +191,20 @@ def clk_status_to_string(clk_status):
     return status_string
 
 
+def lf_source_to_string(lf_oscillator_source):
+    """
+    Convert LF oscillator source to string
+
+    @param lf_oscillator_source:
+    @return: string based on input
+    """
+    if lf_oscillator_source == OSCILLATOR_SOURCE_RC:
+        return "LFRC"
+    if lf_oscillator_source == OSCILLATOR_SOURCE_XTAL:
+        return "LFXO"
+    return "Unknown"
+
+
 def display_clock_info(message):
     """
     display clock, pll, xtal entries sent back from Target
@@ -209,6 +232,19 @@ def display_clock_info(message):
     # word 1 is the CM0+ frequency
     (cm0_freq,) = struct.unpack("<f", bytes(message[4:8]))
     isp_print_color("blue", "SE frequency %0.2fMHz\n" % cm0_freq)
+
+    lf_source_index = CLOCK_GET_LF_SOURCE_WORD * 4
+    lf_freq_index = CLOCK_GET_LF_FREQ_WORD * 4
+    (lf_oscillator_source,) = struct.unpack(
+        "<I", bytes(message[lf_source_index : lf_source_index + 4])
+    )
+    (lf_frequency_hz,) = struct.unpack(
+        "<I", bytes(message[lf_freq_index : lf_freq_index + 4])
+    )
+    isp_print_color(
+        "blue", "LF source %s\n" % lf_source_to_string(lf_oscillator_source)
+    )
+    isp_print_color("blue", "LF frequency %uHz\n" % lf_frequency_hz)
 
     isp_print_color("blue", "\nRegisters:\n")
     for counter in range(len(register_names)):

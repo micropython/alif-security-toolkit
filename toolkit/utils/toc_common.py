@@ -670,3 +670,27 @@ def validateOptions(fwsections):
                     + sec["identifier"]
                 )
                 sys.exit(EXIT_WITH_ERROR)
+
+        if "ENCRYPT" in sec["flags"]:
+            if sec["identifier"][:5].upper() == "SERAM":
+                continue
+
+            if "LOAD" not in sec["flags"]:
+                print(
+                    "[ERROR] images running from MRAM (XIP mode), can't be encrypted!"
+                )
+                print(
+                    "[ERROR] Please correct the configuration in image "
+                    + sec["identifier"]
+                )
+                sys.exit(EXIT_WITH_ERROR)
+
+            if sec["mramAddress"] != "none":
+                print(
+                    "[ERROR] mramAddress should not be specified for encrypted images!"
+                )
+                print(
+                    "[ERROR] Please correct the configuration in image "
+                    + sec["identifier"]
+                )
+                sys.exit(EXIT_WITH_ERROR)

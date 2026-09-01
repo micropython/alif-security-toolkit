@@ -44,6 +44,10 @@
     {
       "id": "SE_BOOT_INFO",
       "value": 1
+    },
+    {
+      "id": "SE_CLK_SRC_PLL",
+      "value": 0
     }
   ]
 }

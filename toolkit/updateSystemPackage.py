@@ -288,7 +288,8 @@ def main():
     # if ext OSPI is selected, and images exists, erase OSPI to continue
     if args.memory:
         # for now, OSPI sector size is fixed
-        ospi = OSPIMemoryHandler(isp, ALIF_BASE_ADDRESS, MEM_SIZE, ERASE_SECTOR_SIZE_4K)
+
+        ospi = OSPIMemoryHandler(isp, ALIF_BASE_ADDRESS, ALIF_EAGLE_OSPI_PACKAGE_SIZE)
         ospi.erase_sectors()
 
     isp_start(isp)  # Start ISP Sequence

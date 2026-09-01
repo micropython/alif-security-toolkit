@@ -145,6 +145,18 @@
     {
       "id": "REG_ALIASING_CTRL",
       "value": "0x00000001"
+    },
+    {
+      "id": "PLL_START_WAIT_COUNT",
+      "value": "5000"
+    },
+    {
+      "id": "XTAL_START_WAIT_COUNT",
+      "value": "5000"
+    },
+    {
+      "id": "SE_CLK_SRC_PLL",
+      "value": 0
     }
   ]
 }

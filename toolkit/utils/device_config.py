@@ -46,6 +46,9 @@ misc_settings_headers = {
     "BOR_THRESHOLD": "0x00070001",
     "SHARED_MEM_CTRL": "0x00080001",
     "REG_ALIASING_CTRL": "0x00090001",
+    "PLL_START_WAIT_COUNT": "0x000A0001",
+    "XTAL_START_WAIT_COUNT": "0x000B0001",
+    "SE_CLK_SRC_PLL": "0x000C0001",
 }
 
 metadata_settings_headers = {

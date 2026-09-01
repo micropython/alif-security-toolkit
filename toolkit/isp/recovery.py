@@ -257,7 +257,7 @@ def recovery_core(isp, ext_ospi=False):
 
     if ext_ospi:
         # Erase OSPI before writing
-        ospi = OSPIMemoryHandler(isp, ALIF_BASE_ADDRESS, MEM_SIZE, ERASE_SECTOR_SIZE_4K)
+        ospi = OSPIMemoryHandler(isp, ALIF_BASE_ADDRESS, ALIF_EAGLE_OSPI_PACKAGE_SIZE)
         ospi.erase_sectors()
 
         # Calculate the OSPI-relative address for writing

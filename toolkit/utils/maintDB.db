@@ -34,7 +34,8 @@
     "utils" : {
         "Terminal mode" : "terminal_mode",
         "Get SERAM metrics" : "get_seram_info_action",
-        "Get ECC key" : "get_ecc_key",
+        "Get ECC key" : "get_ecc_key_action",
+        "Get Key Management" : "get_key_management_action",
         "Get Firewall configuration" : "get_firewall_config",
         "Alt Boot OTP" : "write_altboot_otp_action"
      },

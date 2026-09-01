@@ -19,13 +19,26 @@ __author__ onyettr
 
 # pylint: disable=unused-argument, invalid-name, consider-using-f-string
 import struct
-from isp_print import isp_print_color
+
+try:
+    from isp_print import isp_print_color
+except ImportError:
+
+    def isp_print_color(color, msg):  # fallback when running standalone
+        """
+        Dummy if import fails
+        """
+        print(msg, end="")
+
 
 SRAM0_SIZE_lut = {0: "4.0", 1: "2.0"}
 
 SRAM1_SIZE_lut = {0: "2.5", 1: "0.0"}
 
 MRAM_SIZE_lut = {0: "6.0", 1: "4.5", 2: "3.0", 3: "1.5"}
+
+# Alif Semiconductor Organisationally Unique Identifier (OUI/OID)
+ALIF_OID = bytes([0x78, 0x59, 0x94])
 
 
 class CP_data_t:
@@ -102,6 +115,115 @@ class CP_data_t:
         isp_print_color("blue", "\t+ Week#    %d\n" % (self.cp_mfgr_id_lot_id_workweek))
         isp_print_color("blue", "\t+ Lot#     %d\n" % (self.cp_mfgr_id_lot_id))
 
+    # ------------------------------------------------------------------
+    # EUI generation — ported from services_host_system.c
+    # ------------------------------------------------------------------
+    def _get_eui64_extension(self):
+        """
+        Pack manufacturing data into 40 bits (5 bytes) for EUI-64.
+        Mirrors get_eui64_extension() in services_host_system.c.
+
+        Bit layout across 5 output bytes:
+          Byte 0: x x x x x x x | y(msb)
+          Byte 1: y y y y y y   | wf(hi2)
+          Byte 2: wf wf wf f    | yr(hi4)
+          Byte 3: yr yr          | wk wk wk wk wk wk
+          Byte 4: lot_no (8 bits)
+        """
+        year_raw = (self.cp_mfgr_id_lot_id_year - 2020) & 0x3F
+        seven_1 = self.cp_mfgr_id_x_loc & 0x7F
+        seven_2 = self.cp_mfgr_id_y_loc & 0x7F
+        six_3 = ((self.cp_mfgr_id_wfr_id << 1) | self.cp_mfgr_id_lot_id_FABID) & 0x3F
+        six_4 = year_raw
+        six_5 = self.cp_mfgr_id_lot_id_workweek & 0x3F
+        eight = self.cp_mfgr_id_lot_id & 0xFF
+
+        b0 = ((seven_1 << 1) | ((seven_2 & 0x40) >> 6)) & 0xFF
+        b1 = (((seven_2 & 0x3F) << 2) | ((six_3 & 0x30) >> 4)) & 0xFF
+        b2 = (((six_3 & 0x0F) << 4) | ((six_4 & 0x3C) >> 2)) & 0xFF
+        b3 = (((six_4 & 0x03) << 6) | six_5) & 0xFF
+        b4 = eight
+        return bytes([b0, b1, b2, b3, b4])
+
+    def _get_eui48_extension(self):
+        """
+        Pack manufacturing data into 24 bits (3 bytes) for EUI-48.
+        Mirrors get_eui48_extension() in services_host_system.c.
+
+        Bit layout across 3 output bytes:
+          Byte 0: x x x x x x | y(hi2)
+          Byte 1: y y y y     | wf(hi4)
+          Byte 2: wf lt       | wk wk wk wk wk wk
+        """
+        six_1 = self.cp_mfgr_id_x_loc & 0x3F
+        six_2 = self.cp_mfgr_id_y_loc & 0x3F
+        six_3 = ((self.cp_mfgr_id_wfr_id << 1) | (self.cp_mfgr_id_lot_id & 0x1)) & 0x3F
+        six_4 = self.cp_mfgr_id_lot_id_workweek & 0x3F
+
+        b0 = ((six_1 << 2) | ((six_2 & 0x30) >> 4)) & 0xFF
+        b1 = (((six_2 & 0x0F) << 4) | ((six_3 & 0x3C) >> 2)) & 0xFF
+        b2 = (((six_3 & 0x03) << 6) | six_4) & 0xFF
+        return bytes([b0, b1, b2])
+
+    def get_eui64(self):
+        """
+        Return the full 8-byte EUI-64:
+          [5-byte extension][3-byte Alif OID 78:59:94]
+        Mirrors SERVICES_system_get_device_id64() in services_host_system.c.
+        """
+        return self._get_eui64_extension() + ALIF_OID
+
+    def get_eui48(self):
+        """
+        Return the full 6-byte EUI-48:
+          [3-byte Alif OID 78:59:94][3-byte extension]
+        """
+        return ALIF_OID + self._get_eui48_extension()
+
+    def display_eui(self):
+        """
+        Print EUI extensions matching C TEST_print output:
+          EUI-48 extension: XX-XX-XX         (3 bytes, no OID)
+          EUI-64 extension: XX-XX-XX-XX-XX   (5 bytes, no OID)
+        """
+        ext48 = self._get_eui48_extension()
+        ext64 = self._get_eui64_extension()
+        dev_id = self.get_eui64()  # ext64 + ALIF_OID
+        isp_print_color(
+            "blue",
+            "\t+ EUI-48 extension: %02X-%02X-%02X\n" % (ext48[0], ext48[1], ext48[2]),
+        )
+        isp_print_color(
+            "blue",
+            "\t+ EUI-64 extension: %02X-%02X-%02X-%02X-%02X\n"
+            % (ext64[0], ext64[1], ext64[2], ext64[3], ext64[4]),
+        )
+        isp_print_color(
+            "blue",
+            "\t+ Device ID64:      %02X-%02X-%02X-%02X-%02X-%02X-%02X-%02X\n"
+            % (
+                dev_id[0],
+                dev_id[1],
+                dev_id[2],
+                dev_id[3],
+                dev_id[4],
+                dev_id[5],
+                dev_id[6],
+                dev_id[7],
+            ),
+        )
+
+    def display_full_eui(self):
+        """Print both EUI-64 and EUI-48 derived from this CP bank's data."""
+        eui64 = self.get_eui64()
+        eui48 = self.get_eui48()
+        isp_print_color(
+            "blue", "\t+ EUI-64   %s\n" % ":".join("%02X" % b for b in eui64)
+        )
+        isp_print_color(
+            "blue", "\t+ EUI-48   %s\n" % ":".join("%02X" % b for b in eui48)
+        )
+
 
 def swap32(x):
     """swap32 swap bytes in int32"""
@@ -123,6 +245,7 @@ def decode_otp_manufacture(mfr_data_message):
     Bank0.otp_manufacture_bank_0_decode(mfr_data_message)
     #    isp_print_color('blue', "CP1\n")
     Bank0.display_manufacture_otp_info()
+    Bank0.display_eui()
 
 
 #    CP2_info.display_manufacture_otp_info()

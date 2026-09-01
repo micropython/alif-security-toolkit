@@ -517,6 +517,8 @@ def setKeyEnvironment(cfg):
         keyEnv = SPARK_REV_A0
     if feature == "Spark" and revision in ["FPGA_A7", "A7"]:
         keyEnv = SPARK_REV_A7
+    if feature == "Spark" and revision in ["FPGA_A8", "A8"]:
+        keyEnv = SPARK_REV_A7
     if feature == "Eagle" and revision in ["FPGA_A0", "A0"]:
         keyEnv = EAGLE_REV_A0
     if feature == "Eagle" and revision in ["FPGA_A1", "A1"]:
@@ -573,6 +575,14 @@ def processCmdLineOption(args):
         except KeyError:
             print(f"[ERROR] Invalid Part# {args.part}")
             sys.exit(EXIT_WITH_ERROR)
+    else:
+        if args.sku is not None:
+            partDescription = getPartDescription(args.sku.upper())
+            try:
+                cfg["DEVICE"]["Part#"] = partDescription
+            except KeyError:
+                print(f"[ERROR] Invalid Part# {args.part}")
+                sys.exit(EXIT_WITH_ERROR)
 
     if args.rev is not None:
         dev_revisions = featDB[devDB[cfg["DEVICE"]["Part#"]]["featureSet"]]["revisions"]
@@ -681,6 +691,7 @@ def main():
         help="Specify COM port",
     )
     parser.add_argument("-p", "--part", type=str, help="Part#")
+    parser.add_argument("-k", "--sku", type=str, help="SKU#")
     parser.add_argument(
         "-a",
         "--autocfg",
@@ -789,7 +800,14 @@ def main():
 
     # Process command line arguments if provided
     # args = parser.parse_args() @it should be already parsed above
-    if args.part is not None or args.rev is not None:
+    if args.part is not None or args.sku is not None or args.rev is not None:
+        # using either Part# or SKU# requires to set the Rev also
+        if (args.part or args.sku) is not None and args.rev is None:
+            print(
+                "[ERROR] use -r together with either -p or -k to fully identify the desired part"
+            )
+            sys.exit()
+
         processCmdLineOption(args)
         sys.exit()
 

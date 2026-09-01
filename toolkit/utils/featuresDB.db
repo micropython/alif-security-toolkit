@@ -5,7 +5,8 @@
     "revisions": ["B4"],
     "rev_package_ext": {"B4":"rev-b4"},
     "rev_baud_rate": {"B4":55000},
-    "seram_banks" : 2
+    "seram_banks" : 2,
+    "supports_ospi": false
   },
   "Eagle":{
     "mram_total" : "0x600000",
@@ -13,14 +14,16 @@
     "revisions": ["A0","A1"],
     "rev_package_ext": {"A0":"rev-a0","A1":"rev-a1"},
     "rev_baud_rate": {"A0":57600,"A1":57600},
-    "seram_banks" : 2
+    "seram_banks" : 2,
+    "supports_ospi": true
   },
   "Spark":{
     "mram_total" : "0x200000",
     "mram_base"  : "0x80000000",
-    "revisions": ["A0","A5","A7"],
-    "rev_package_ext": {"A0":"rev-a0","A5":"rev-a5", "A7":"rev-a7"},
-    "rev_baud_rate": {"A0":56500,"A5":57600,"A7":57600},
-    "seram_banks" : 2
+    "revisions": ["A5", "A7", "A8"],
+    "rev_package_ext": {"A5":"rev-a5", "A7":"rev-a7", "A8":"rev-a8"},
+    "rev_baud_rate": {"A5":57600, "A7":57600, "A8":57600},
+    "seram_banks" : 2,
+    "supports_ospi": false
   }
 }

@@ -27,18 +27,20 @@ from isp_protocol import ISP_GET_OSPI_PARAMETERS
 
 REVISIONS = {
     "0 0 0 0": ("UNKNOWN", "UNKNOWN"),
-    "0 161 0 0": ("FUSION", "A1"),
-    "0 165 0 0": ("SPARK", "A5"),
-    "0 176 0 0": ("FUSION", "B0"),
-    "0 178 0 0": ("FUSION", "B2"),
-    "0 179 0 0": ("FUSION", "B3"),
-    "0 180 0 0": ("FUSION", "B4"),
-    "1 160 0 0": ("SPARK", "A0"),
-    "1 165 0 0": ("SPARK", "A5"),
-    "160 2 0 0": ("EAGLE", "A0"),
-    "160 3 0 0": ("EAGLE", "FPGA_A0"),
-    "161 2 0 0": ("EAGLE", "A1"),
-    "161 3 0 0": ("EAGLE", "FPGA_A1"),
+    "0 161 0 0": ("Fusion", "A1"),
+    "0 165 0 0": ("Spark", "A5"),
+    "0 176 0 0": ("Fusion", "B0"),
+    "0 178 0 0": ("Fusion", "B2"),
+    "0 179 0 0": ("Fusion", "B3"),
+    "0 180 0 0": ("Fusion", "B4"),
+    "1 160 0 0": ("Spark", "A0"),
+    "1 165 0 0": ("Spark", "A5"),
+    "1 167 0 0": ("Spark", "A7"),
+    "1 168 0 0": ("Spark", "A8"),
+    "160 2 0 0": ("Eagle", "A0"),
+    "160 3 0 0": ("Eagle", "FPGA_A0"),
+    "161 2 0 0": ("Eagle", "A1"),
+    "161 3 0 0": ("Eagle", "FPGA_A1"),
 }
 
 # bootloader stages
@@ -56,6 +58,8 @@ SERAM_LOADING_MEMORY_TYPE = {
 }
 
 EXPECTED_PACKET_LENGTH = 136
+
+FEATURES_DB_FILE = "utils/featuresDB.db"
 
 
 class device_get_attributes:
@@ -94,11 +98,11 @@ class device_get_attributes:
         )
         # probe and set device bootloader stage
         self.stage = self.__get_device_stage(isp)
+
+        # read architectures DB
+        features = read_global_config(FEATURES_DB_FILE)
         # check if device supports external OSPI memory
-        if self.feature == "EAGLE":
-            self.supports_ospi = True
-        else:
-            self.supports_ospi = False
+        self.supports_ospi = features[self.feature]["supports_ospi"]
 
     def get_attributes(self):
         """
@@ -160,6 +164,12 @@ class device_get_attributes:
 
             feature = rev[0]
             rev = rev[1]
+            # fix up Spark A8 revision issue
+            if feature == "Spark" and rev == "A7":
+                # check for bit 6 == 1  to differentiate A7 from A8 since they have the same revision value
+                if message[98] & 0x40:
+                    rev = "A8"
+
             # device Part#
             lst = message[6:22]
             ascii_list = [chr(ch) for ch in lst]
@@ -170,12 +180,12 @@ class device_get_attributes:
                 bytes(part_number, "utf-8")
                 == b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
             ):
-                if feature == "SPARK":
-                    part_number = "AB1C1F4M51820PH0"  # SPARK default device
-                elif feature == "EAGLE":
-                    part_number = "AE822FA0E5597LS0"  # EAGLE default device
+                if feature == "Spark":
+                    part_number = "AB1C1F4M51820PH0"  # Spark default device
+                elif feature == "Eagle":
+                    part_number = "AE822FA0E5597LS0"  # Eagle default device
                 else:
-                    part_number = "AE722F80F55D5LS"  # FUSION default device
+                    part_number = "AE722F80F55D5LS"  # Fusion default device
                 print("[WARN] No Part# was detected! Defaulting to " + part_number)
 
             # HBK0

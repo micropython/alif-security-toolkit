@@ -11,6 +11,7 @@ import struct
 from isp_print import isp_print_color
 from isp_print import isp_print_response
 from otp_mfgr_decode import decode_otp_manufacture
+from otp_check import check_otp_integrity
 from trim_decode import trim_decoder
 
 # Wounding bits
@@ -101,8 +102,14 @@ def version_decode(isp, message):
         raw_part = int.from_bytes(ALIF_PN, "little")
         if raw_part == 0x0:
             ascii_list = "0x0"
+            device_variant = None
         else:
             ascii_list = [chr(ch) for ch in ALIF_PN]
+            if ascii_list[1] == "B" or "".join(ascii_list).startswith("AE1C"):
+                device_variant = "B1E1C"
+            else:
+                device_variant = "ENSEMBLE"
+
         isp_print_color("blue", "%s\n" % ("".join(ascii_list)))
 
         HBK0 = message[22:38]  # bytes 22-37 (limit 38)
@@ -144,7 +151,7 @@ def version_decode(isp, message):
         isp_print_color("blue", " MfgData\t=  ")
         # isp_print_color("blue",hex(MfgDatatInt))
         display_string(MfgData)
-        trim_decoder(MfgData)
+        trim_decoder(MfgData, device_variant)
         if MfgDatatInt != 0:
             print("")
             decode_otp_manufacture(MfgData)
@@ -170,5 +177,8 @@ def version_decode(isp, message):
         LCS = message[134]
         isp_print_color("blue", " LCS\t\t=  0x%x (%s)" % (LCS, LCS_lut.get(LCS)))
         print("")
+
+        # Check the OTP value integrity
+        check_otp_integrity(ALIF_PN, HBK0, HBK1, HBK_FW, DCU)
 
         return version

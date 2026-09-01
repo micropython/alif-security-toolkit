@@ -216,6 +216,9 @@ def burn_mram_isp(isp, handler, fileName, destAddress, verbose_display, auth_ima
 
                 if verbose_display is False:
                     progress_bar(fileName, offset + left_over_blocks, fileSize)
+        else:
+            print("\n[ERROR] Something went wrong during the download process!")
+            return False
 
         print("\r")
         delay = 0

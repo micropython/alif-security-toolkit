@@ -10,7 +10,7 @@ Maintenance mode tool
 
  __author__ = "ronyett"
  __copyright__ = "ALIF Seminconductor"
- __version__ = "0.06.000"
+ __version__ = "0.23.000"
  __status__ = "Dev"    "
 """
 
@@ -57,7 +57,7 @@ binPath = Path("bin/")
 # 0.08.003    added Ctrl-C in showAndSelectOptions()
 # 0.08.004    added python error exit code
 # 0.09.000    added menu configurations
-# 0.10.000    Integrated recoery mode
+# 0.10.000    Integrated recovery mode
 # 0.11.000    added get POWER
 # 0.12.000    add command line option
 # 0.13.000    get baudrate from DBs
@@ -70,7 +70,9 @@ binPath = Path("bin/")
 # 0.20.000    addition of extra command line options without using menus
 # 0.21.000    addition of COM PORT (-c) option
 # 0.22.000    new recovery menu for OSPI memory
-TOOL_VERSION = "0.22.000"
+# 0.23.000    addition of batch mode for command line -opt option
+# 0.24.000    addition of DEVICE_OSPI_CONFIGURED_IN_OTP global to control OTP write for altboot based on device capabilities and current OTP configuration
+TOOL_VERSION = "0.24.000"
 
 EXIT_WITH_ERROR = 1
 TARGET_RESPONDED = 1
@@ -83,7 +85,7 @@ def confirmString_generator(size=6, chars=string.ascii_uppercase + string.digits
 
     Args:
         size    length of string to generate
-        chars
+        chars   choice characters
 
     Returns
         'random' string
@@ -227,7 +229,12 @@ def get_mram_read_offset(isp, offset=0):
     """
     get MRAMvalue from offset
     """
-    offset_hex = int(offset, 16)
+    try:
+        offset_hex = int(offset, 16)
+    except ValueError:
+        print(f"[ERROR] Invalid hex offset: {offset}")
+        return
+
     isp_start(isp)
     isp_read_mram(isp, offset_hex)
     isp_stop(isp)
@@ -259,7 +266,12 @@ def get_otp_read_offset(isp, offset=0):
     """
     get OTP value with passed offset
     """
-    offset_hex = int(offset, 16)
+    try:
+        offset_hex = int(offset, 16)
+    except ValueError:
+        print("[ERROR] not a valid hex offset")
+        return
+
     isp_start(isp)
     isp_read_otp(isp, offset_hex)
     isp_stop(isp)
@@ -269,16 +281,18 @@ def get_otp_read(isp):
     """
     get OTP value
     """
-    offset = input("Enter word addr(hex): ")
     try:
-        offset_hex = int(offset, 16)
+        offset = input("Enter word addr(hex): ")
     except EOFError:
         print("[Ctrl-C EOF]")
         sys.exit()
     except KeyboardInterrupt:
         print("[Ctrl-C]")
         sys.exit()
-    except:
+
+    try:
+        offset_hex = int(offset, 16)
+    except ValueError:
         print("[ERROR] not a valid hex offset")
         return
 
@@ -291,17 +305,19 @@ def get_address_action(isp):
     """
     get address value
     """
-    address = input("Enter addr(hex): ")
     try:
-        address_hex = int(address, 16)
+        address = input("Enter addr(hex): ")
     except EOFError:
         print("[Ctrl-C EOF]")
         sys.exit()
     except KeyboardInterrupt:
         print("[Ctrl-C]")
         sys.exit()
-    except:
-        print("[ERROR] not a valid address")
+
+    try:
+        address_hex = int(address, 16)
+    except ValueError:
+        print("[ERROR] not a valid hex offset")
         return
 
     isp_start(isp)
@@ -316,6 +332,16 @@ def get_ospi_action(isp):
     """
     isp_start(isp)
     isp_get_ospi_data(isp)
+    isp_stop(isp)
+
+
+def get_key_management_action(isp):
+    """
+    get_key_management_action
+        obtain the Secure Key data
+    """
+    isp_start(isp)
+    isp_get_key_management_data(isp)
     isp_stop(isp)
 
 
@@ -336,21 +362,6 @@ def set_address_action(isp):
         print("[ERROR] not a valid address")
         return
 
-    data = input("Enter data(hex): ")
-    try:
-        data_hex = int(data, 16)
-    except EOFError:
-        print("[Ctrl-C EOF]")
-        sys.exit()
-    except KeyboardInterrupt:
-        print("[Ctrl-C]")
-        sys.exit()
-    except:
-        print("[ERROR] not a valid address")
-        return
-
-    isp_set_address(isp, address_hex, data_hex)
-
 
 def get_trace_buffer(isp):
     """
@@ -368,9 +379,68 @@ def get_seram_trace_buffer(isp):
     isp_start(isp)
     try:
         isp_get_seram_trace_buffer(isp)
-    except:
-        print("[ERROR] Unable to get SERAM trace when SEROM is in recovery mode")
+    except Exception as e:
+        print(f"[ERROR] Unable to get SERAM trace when SEROM is in recovery mode: {e}")
+    finally:
+        isp_stop(isp)
+
+
+def get_log_data_action(isp):
+    """
+    get_log_data_action
+    """
+    isp_start(isp)
+    log_data = isp_get_log_data(isp)
+    if log_data is not None:
+        process_log_data(log_data)
     isp_stop(isp)
+
+
+def get_ecc_key(isp):
+    """
+    get_ecc_key from device
+    """
+    isp_start(isp)
+    isp_get_ecc_key(isp)
+    isp_stop(isp)
+
+
+def get_firewall_config(isp):
+    """
+    get_firewall_config
+        Pull back Firewall config from target
+    """
+    isp_start(isp)
+    isp_get_firewall_config(isp)
+    isp_stop(isp)
+
+
+def set_address_action(isp):
+    """
+    set address value
+    """
+    try:
+        address_hex = _read_hex_input("Enter addr(hex): ")
+    except EOFError:
+        print("[Ctrl-C EOF]")
+        sys.exit()
+    except KeyboardInterrupt:
+        print("[Ctrl-C]")
+        sys.exit()
+
+    try:
+        data_hex = _read_hex_input("Enter data(hex): ")
+    except EOFError:
+        print("[Ctrl-C EOF]")
+        sys.exit()
+    except KeyboardInterrupt:
+        print("[Ctrl-C]")
+        sys.exit()
+
+    if address_hex is None or data_hex is None:
+        return
+
+    isp_set_address(isp, address_hex, data_hex)
 
 
 def set_print_enable_action(isp):
@@ -410,9 +480,14 @@ def write_altboot_otp_action(isp):
     Returns:
         None
     """
+    if DEVICE_OSPI_CONFIGURED_IN_OTP != "OSPI_SUPPORTED_BUT_NOT_ENABLED":
+        print(
+            "[INFO] Device does not support OSPI or already has OSPI enabled in OTP, skipping OTP write"
+        )
+        return
 
     # This operation is destructive as it writes OTP
-    # Ensure the ussr is ok with this
+    # Ensure the user is ok with this
     if not confirm_burn():
         return  # Abort the OTP burn
 
@@ -421,26 +496,20 @@ def write_altboot_otp_action(isp):
     otp_altboot_file = "otp-altload.bin"
     otp_spiboot_file = "otp-extomem.bin"
     try:
-        of = open(binPath / otp_altboot_file, "rb")
+        with (
+            open(binPath / otp_altboot_file, "rb") as of,
+            open(binPath / otp_spiboot_file, "rb") as ds,
+        ):
+            otp_line = of.read(4)
+            word1 = struct.unpack("i", otp_line)[0]
+
+            otp_line = ds.read(12)
+            word2, word3, word4 = struct.unpack("iii", otp_line)
+
+            combined_data_bytes = struct.pack("<IIII", word1, word2, word3, word4)
     except (IOError, OSError) as e:
-        print(f"[ERROR] Failed to open binary file {otp_altboot_file} {e}")
+        print(f"[ERROR] Failed to open binary file {e}")
         return
-
-    try:
-        ds = open(binPath / otp_spiboot_file, "rb")
-    except (IOError, OSError) as e:
-        print(f"[ERROR] Failed to open binary file {otp_spiboot_file} {e}")
-        return
-
-    otp_line_size = 4
-    otp_line = of.read(otp_line_size)
-    word1 = struct.unpack("i", otp_line)[0]
-
-    otp_line_size = 12
-    otp_line = ds.read(otp_line_size)
-    word2, word3, word4 = struct.unpack("iii", otp_line)
-
-    combined_data_bytes = struct.pack("<IIII", word1, word2, word3, word4)
 
     isp_burn_ospi_otp(isp, combined_data_bytes)
 
@@ -457,9 +526,10 @@ def terminal_mode(isp):
 
     while going:
         output_line = isp.readSerial(ISP_MAXIMUM_PACKET_SIZE)
-        raw_print = bytearray()
-        for i in range(len(output_line)):
-            raw_print.append(output_line[i])
+        #        raw_print = bytearray()
+        #        for i in range(len(output_line)):
+        #            raw_print.append(output_line[i])
+        raw_print = bytearray(output_line)
         try:
             ascii_char = raw_print.decode("ascii")
             print(ascii_char, flush=True, end="")
@@ -482,7 +552,8 @@ def application_mram_erase(isp, address, erase_length, reset):
     """
     global baud_rate
 
-    erase_length_fmt = "{:,}".format(erase_length)
+    #    erase_length_fmt = "{:,}".format(erase_length)
+    erase_length_fmt = f"{erase_length:,}"
     pattern = 0x00000000
 
     print(f"[INFO] erasing 0x{address:x} {erase_length_fmt} bytes")
@@ -728,17 +799,6 @@ def process_log_data(log_data):
             display_str += ch
 
 
-def get_log_data_action(isp):
-    """
-    get_log_data_action
-    """
-    isp_start(isp)
-    log_data = isp_get_log_data(isp)
-    if log_data is not None:
-        process_log_data(log_data)
-    isp_stop(isp)
-
-
 def maintenance_mode(isp):
     """
     maintenance_mode
@@ -827,7 +887,7 @@ def soft_maintenance_mode(isp):
     put_target_in_maintenance_mode(isp, baud_rate, False)
 
 
-def get_ecc_key(isp):
+def get_ecc_key_action(isp):
     """
     get_ecc_key from device
     """
@@ -836,7 +896,7 @@ def get_ecc_key(isp):
     isp_stop(isp)
 
 
-def get_firewall_config(isp):
+def get_firewall_config_action(isp):
     """
     get_firewall_config
         Pull back Firewall config from target
@@ -853,12 +913,12 @@ def show_help(supported_commands):
     """
     print("Supported commands:")
     for item in sorted(supported_commands):
-        print("\t{}".format(supported_commands[item][0]))
+        print(f"\t{supported_commands[item][0]}")
 
 
 def maintenance_menu(supported_commands, isp):
     """
-    maintenance_mode
+    maintenance_menu
         Show Menu options and get user input
     """
 
@@ -868,7 +928,7 @@ def maintenance_menu(supported_commands, isp):
         print("\nAvailable options:\n")
         i = 1
         for item in supported_commands:
-            print("%2s - %s" % (str(i), item))
+            print(f"{i:2} - {item}")
             i += 1
             optList.append(item)
 
@@ -903,9 +963,9 @@ def maintenance_menu(supported_commands, isp):
         option = "x"
 
 
-def showAndSelectOptions(menu_list):
+def menu_show_and_select_options(menu_list):
     """
-    showAndSelectOptions
+    menu_show_and_select_options
     """
     option = "x"
     while option == "x":
@@ -913,7 +973,8 @@ def showAndSelectOptions(menu_list):
         i = 1
         optList = []
         for opt in menu_list:
-            print("%2s - %s" % (str(i), opt))
+            print(f"{i:2} - {opt}")
+            #            print("%2s - %s" % (str(i), opt))
             i += 1
             optList.append(opt)
         try:
@@ -942,29 +1003,17 @@ def read_json_file(file):
     """
     read_json_file
     """
-    f = open(file, "r")
-    try:
-        data = json.load(f)
-
-    except JSONDecodeError as e:
-        print("[ERROR] in JSON file.")
-        print(str(e))
-        sys.exit(EXIT_WITH_ERROR)
-    except ValueError as v:
-        print("[ERROR] in JSON file:")
-        print(str(v))
-        sys.exit(EXIT_WITH_ERROR)
-    except:
-        print("[ERROR] Unknown error loading JSON file")
-        sys.exit(EXIT_WITH_ERROR)
-
-    f.close()
-    return data
+    with open(file, "r") as f:
+        try:
+            return json.load(f)
+        except (JSONDecodeError, ValueError) as e:
+            print(f"[ERROR] {e} in JSON file {file}")
+            sys.exit(EXIT_WITH_ERROR)
 
 
-def checkRestrictions(menu_item, menu_config):
+def menu_check_restrictions(menu_item, menu_config):
     """
-    checkRestrictions
+    menu_check_restrictions
     """
     if menu_item in menu_config.keys():
         for item in menu_config[menu_item]:
@@ -973,14 +1022,17 @@ def checkRestrictions(menu_item, menu_config):
     return False
 
 
-def command_line_mode(isp, cli_option, cli_params=None):
+def command_line_mode(isp, cli_option, cli_params=None, verbose=False):
     """
-    operate on commands passed in rather than the menus
+    operate on commands passed in rather than the menus.
+    Accepts either a single command string or a list of tokens.
 
     Args:
         isp        handle to isp core
-        cli_option Command line passed
-        cli_params Command line extra arguments
+        cli_option single command string, or list of tokens from argparse
+                   e.g. ["gettoc", "getbanner"] or ["getmramdata", "0x10"]
+        cli_params extra arguments for single command mode
+        verbose    print command header before each execution
 
     Returns:
         None
@@ -989,17 +1041,21 @@ def command_line_mode(isp, cli_option, cli_params=None):
     def show_commands(command_line_lut):
         """
         display supported commands
-
-        Args:
-            command_line_lut which command to display
-
-        Returns:
-            None
         """
         print("Supported commands:")
         for cli_cmd, (func, description) in command_line_lut.items():
             print(f"  {cli_cmd:<12} {description}")
         sys.exit(EXIT_WITH_ERROR)
+
+    def execute_one(cmd, params):
+        """
+        dispatch a single command with optional params
+        """
+        cmds_with_params = ["getotpread", "getmramdata"]
+        if cmd in cmds_with_params:
+            command_line_lut[cmd][0](isp, *params)
+        else:
+            command_line_lut[cmd][0](isp)
 
     if cli_params is None:
         cli_params = []
@@ -1013,22 +1069,40 @@ def command_line_mode(isp, cli_option, cli_params=None):
         "getcpustatus": (get_cpu_status_action, "Get CPU boot info"),
         "getfirewall": (get_firewall_config, "Get firewall configuration"),
         "getecckey": (get_ecc_key, "Get ECC key      "),
-        "devenquiry": (get_enquiry_action, "Device enrquiry  "),
+        "devenquiry": (get_enquiry_action, "Device enquiry   "),
         "getmramdata": (get_mram_read_offset, "Get MRAM <offset>"),
         "getotpread": (get_otp_read_offset, "Get OTP  <offset>"),
     }
+
+    # --- list mode: tokens from argparse ---
+    if isinstance(cli_option, list):
+        cmds_with_params = ["getotpread", "getmramdata"]
+        tokens = iter(cli_option)
+        for token in tokens:
+            if token == "help":
+                show_commands(command_line_lut)
+            if token not in command_line_lut:
+                print(f"[ERROR] Command '{token}' not recognized")
+                sys.exit(EXIT_WITH_ERROR)
+            if verbose:
+                print(f"\n[INFO] --- Running: {token} ---")
+            if token in cmds_with_params:
+                param = next(tokens, None)
+                if param is None:
+                    print(f"[ERROR] Command '{token}' requires a hex offset")
+                    sys.exit(EXIT_WITH_ERROR)
+                execute_one(token, [param])
+            else:
+                execute_one(token, [])
+        return
+
+    # --- single command mode ---
     if cli_option == "help":
         show_commands(command_line_lut)
-
     if cli_option in command_line_lut:
-        # Following commands are ones that take offset values
-        cmds_with_params = ["getotpread", "getmramdata"]
-        if cli_option in cmds_with_params:
-            command_line_lut[cli_option][0](isp, *cli_params)
-        else:
-            command_line_lut[cli_option][0](isp)
+        execute_one(cli_option, cli_params)
     else:
-        print(f"[ERROR] Command {cli_option} not recognized")
+        print(f"[ERROR] Command '{cli_option}' not recognized")
         sys.exit(EXIT_WITH_ERROR)
 
 
@@ -1044,6 +1118,7 @@ def main():
     global DEVICE_REVISION
     global DEVICE_PART_NUMBER
     global DEVICE_FEATURE_SET_REVISION
+    global DEVICE_OSPI_CONFIGURED_IN_OTP
     global handler
     global baud_rate
 
@@ -1069,7 +1144,7 @@ def main():
         "--option",
         type=str,
         default="",
-        help="call option [command] <param> -opt help",
+        help="-opt <command> [<command>...] | -opt <command> <hex-value>   | -opt help",
     )
     parser.add_argument(
         "params", nargs=argparse.REMAINDER, help="additional parameters for the command"
@@ -1129,6 +1204,7 @@ def main():
 
     test_target = isp_test_target(baud_rate, isp)
     print("[INFO] Connecting to target...", end="")
+    DEVICE_OSPI_CONFIGURED_IN_OTP = "UNKNOWN"
     if test_target == TARGET_RESPONDED:
         # be sure device is not in SEROM Recovery Mode
         device = device_probe.device_get_attributes(isp)
@@ -1139,11 +1215,15 @@ def main():
             if device.supports_ospi:
                 if device.is_ospi_enabled(isp):
                     MENU_DB = "utils/maint-ospi-recoveryDB.db"
-
         elif device.is_in_seram():
             # target responded and in SERAM stage
             print("Device connected")
             MENU_DB = "utils/maintDB.db"
+            if device.supports_ospi:
+                if device.is_ospi_enabled(isp):
+                    DEVICE_OSPI_CONFIGURED_IN_OTP = "OSPI_SUPPORTED_AND_ENABLED"
+                else:
+                    DEVICE_OSPI_CONFIGURED_IN_OTP = "OSPI_SUPPORTED_BUT_NOT_ENABLED"
         else:
             print(f"[ERROR] Device state {device.get_stage()}")
     else:
@@ -1161,17 +1241,18 @@ def main():
     menuCfgDB = read_json_file(MENU_CFG)
 
     if args.option:
-        command_line_mode(isp, args.option, args.params)
+        cli_commands = [args.option] + list(args.params)
+        command_line_mode(isp, cli_commands, verbose=args.verbose)
     else:
         opt = "*"
         while opt != "":
-            opt = showAndSelectOptions(groupsDB)
+            opt = menu_show_and_select_options(groupsDB)
 
             # filter available commands based on silicon, revision, etc.
             supported_commands = menuDB[groupsDB[opt]]
             menu_options = {}
             for item in supported_commands:
-                if not checkRestrictions(supported_commands[item], menuCfgDB):
+                if not menu_check_restrictions(supported_commands[item], menuCfgDB):
                     menu_options[item] = supported_commands[item]
             maintenance_menu(menu_options, isp)
 

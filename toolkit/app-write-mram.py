@@ -34,9 +34,14 @@ from isp_core import isp_mram_erase
 from isp_core import CtrlCHandler
 from isp_util import burn_mram_isp
 from isp_util import put_target_in_maintenance_mode
+
+# from isp_protocol import ERASE_SECTOR_SIZE_4K, ERASE_SECTOR_SIZE_32K, ERASE_SECTOR_SIZE_128K
+from isp_util import *
 import device_probe
+from utils.ospi_mem_handler import OSPIMemoryHandler
 
 #  Version                  Feature
+# 0.26.000     Added support for OSPI external memory
 # 0.25.000     Revision and part# checks added (Target vs Host)
 # 0.24.000     Removed JTAG support
 # 0.23.000     Added probing to detect device stage/Part#/Rev
@@ -53,7 +58,7 @@ import device_probe
 # 0.19.000     Removed JTAG access
 # 0.16.000     Addition of baud rate increase for bulk transfer
 # 0.15.000     Fixes for Block sizes and left overs
-TOOL_VERSION = "0.25.000"  # Define Version constant for each separate tool
+TOOL_VERSION = "0.26.000"  # Define Version constant for each separate tool
 
 EXIT_WITH_ERROR = 1
 
@@ -200,6 +205,22 @@ def parse_arguments():
         type=str,
         help="ERASE [APP | <start address> <size> [<pattern>] ]",
     )
+
+    parser.add_argument(
+        "-f",
+        "--full_ospi_erase",
+        action="store_true",
+        help="Full Erase OSPI memory",
+        default=False,
+    )
+    parser.add_argument(
+        "-F",
+        "--full_ospi_erase_no_write",
+        action="store_true",
+        help="Full Erase OSPI memory without writing to MRAM",
+        default=False,
+    )
+
     # creating a mutually exclusive group for -i IMAGES and -S
     # (skip option doesn't make sense in a user provided list...)
     group = parser.add_mutually_exclusive_group()
@@ -211,6 +232,7 @@ def parse_arguments():
         help="images list to burn into NVM "
         '("/path/image1.bin 0x80001000 /path/image2.bin 0x80003000")',
     )
+
     parser.add_argument(
         "-a",
         "--auth_image",
@@ -322,8 +344,10 @@ def main():
                 print("[ERROR] erase arguments are empty")
                 sys.exit(EXIT_WITH_ERROR)
             arg_list += args.erase
+
     elif args.images != "Application TOC Package":
         arg_list = args.images
+
     else:
         dsFile = "bin/application_package.ds"
         arg_list = read_image_list(dsFile)
@@ -375,11 +399,13 @@ def main():
     # be sure device is not in SEROM Recovery Mode
     device = device_probe.device_get_attributes(isp)
     if device.stage != device_probe.STAGE_SERAM:
-        print(
-            "[ERROR] The device is in RECOVERY MODE! "
-            "Please use Recovery option in Maintenance Tool to recover the device!"
+        # print('[ERROR] The device is in RECOVERY MODE! '
+        #      'Please use Recovery option in Maintenance Tool to recover the device!')
+        close_isp_and_exit(
+            isp,
+            "[ERROR] The device is in RECOVERY MODE! \nPlease use Recovery option in Maintenance Tool to recover the device!",
         )
-        sys.exit(EXIT_WITH_ERROR)
+        # sys.exit(EXIT_WITH_ERROR)
 
     # Probe the target device and check it matches the setings on the Host
     print("[INFO] Detected Device:")
@@ -403,6 +429,22 @@ def main():
             f"Continue with operation [y/n]?"
         )
 
+    # lets check if device supports OSPI and if OSPI is enabled in OTP and be prepared to retrieve OSPI parameters when we encounter an OSPI address in the image list,
+    # in this case, there is no explicit option to write to OSPI memory,
+    # so we need to wait until we parse the image list and encounter an OSPI address to check for support and enablement, and retrieve OSPI parameters
+    OSPI_MEM_SIZE = 0
+    if device.supports_ospi:
+        print("[INFO] Device supports OSPI external memory")
+        if device.is_ospi_enabled(isp):
+            print("[INFO] OSPI is enabled in OTP")
+            # retrieve OSPI parameters
+            OSPI_BASE_ADDRESS, OSPI_MEM_SIZE, _, EXT_MEMORY_TYPE = (
+                device.get_ospi_params()
+            )
+            print(
+                f"[INFO] OSPI Parameters: SIZE: {hex(OSPI_MEM_SIZE)}, MEMORY TYPE: {EXT_MEMORY_TYPE}"
+            )
+
     if not args.no_reset:
         put_target_in_maintenance_mode(isp, baud_rate, args.verbose)
 
@@ -413,10 +455,26 @@ def main():
 
     items = arg_list.split(" ")
 
-    isp_start(isp)  # Start ISP Sequence
+    # Start ISP Sequence
+    isp_start(isp)
 
     if args.erase:
+        print(
+            f"[INFO] Erasing MRAM with arguments: {arg_list}, ALIF Base Address: {hex(ALIF_BASE_ADDRESS)}, ALIF MRAM Size: {hex(ALIF_MRAM_SIZE)}"
+        )
         app_mram_erase(isp, arg_list, ALIF_BASE_ADDRESS, ALIF_MRAM_SIZE)
+
+    elif args.full_ospi_erase_no_write:
+        if OSPI_MEM_SIZE == 0:
+            close_isp_and_exit(
+                isp,
+                f"[ERROR] Full OSPI erase option was invoked, but device does not support OSPI or OSPI is not enabled in OTP",
+            )
+
+        erase_ospi_memory(isp, OSPI_BASE_ADDRESS, OSPI_MEM_SIZE, True)
+        print("[INFO] Full OSPI erase performed and exiting without writing to MRAM")
+        sys.exit()
+
     else:
         if dynamic_baud_rate_switch:
             isp_set_baud_rate(isp, COM_BAUD_RATE_MAXIMUM)  # Jack up Baud rate
@@ -426,12 +484,33 @@ def main():
         mode = isp_get_maintenance_status(isp)
         isp_show_maintenance_mode(isp, mode)
 
+        full_erase_done = False
         for e in range(1, len(items), 2):
             addr = items[e]
             address = int(addr, base=16)
             fileName = items[e - 1]
             fileName = fileName.replace("..\\", "")
 
+            print("OSPI address verification...")
+            if getOspiMemTypeFromAddress(address & 0xF0000000) != "INVALID":
+                # ospi memory detected; check if device supports and ospi memory configured in otp
+                if OSPI_MEM_SIZE == 0:
+                    close_isp_and_exit(
+                        isp,
+                        f"[ERROR] OSPI memory detected in image list at address {hex(address)}, but device does not support OSPI or OSPI is not enabled in OTP",
+                    )
+
+                if args.full_ospi_erase:
+                    # Full erase shold be done only once, at the beginning of the first write operation to OSPI memory,
+                    #  and not for each image written to OSPI memory
+                    if not full_erase_done:
+                        full_erase_done = True
+                        erase_ospi_memory(isp, address, OSPI_MEM_SIZE, True)
+                else:
+                    # erase only the sector(s) of the OSPI memory to be written
+                    erase_ospi_memory(isp, address, OSPI_MEM_SIZE, False)
+
+            isp_start(isp)
             if (
                 burn_mram_isp(
                     isp, handler, fileName, address, args.verbose, args.auth_image
@@ -446,11 +525,27 @@ def main():
             isp_set_baud_rate(isp, baud_rate)
             isp.setBaudRate(baud_rate)
 
-    isp_stop(isp)  # Stop ISP Sequence
+    # Stop ISP Sequence
+    isp_stop(isp)
     isp_reset(isp)
 
     isp.closeSerial()
     sys.exit(exit_code)
+
+
+def erase_ospi_memory(isp, address, ospi_mem_size, full_ospi_erase):
+    # Stop ISP Sequence, as OSPI erase doesn't need it
+    isp_stop(isp)
+    APP_MEM_SIZE = ospi_mem_size - ALIF_EAGLE_OSPI_PACKAGE_SIZE
+    if full_ospi_erase:
+        print("[INFO] FULL ERASE was requested!")
+        mem_base = address & 0xF0000000
+        mem_size = APP_MEM_SIZE
+    else:
+        mem_base = address
+        mem_size = (address & 0xF0000000) + APP_MEM_SIZE - mem_base
+    ospi = OSPIMemoryHandler(isp, mem_base, mem_size)
+    ospi.erase_sectors()
 
 
 if __name__ == "__main__":
