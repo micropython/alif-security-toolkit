@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alif-security-toolkit"
+version = "1.112.0"
+description = "Alif Security Toolkit for Alif Semiconductor microcontrollers"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "cryptography>=3.4",
+    "pyserial>=3.5,<4.0",
+]
+
+[project.scripts]
+alif-app-write-mram = "alif_security_toolkit:app_write_mram"
+alif-update-system-package = "alif_security_toolkit:update_system_package"
+
+[tool.setuptools]
+packages = [
+    "alif_security_toolkit",
+    "isp",
+    "utils",
+    "utils.common",
+    "utils.common_cert_lib",
+]
+package-dir = {"" = "toolkit", "alif_security_toolkit" = "toolkit"}
+
+[tool.setuptools.package-data]
+alif_security_toolkit = ["*.py", "alif/*"]
+utils = ["*.db"]

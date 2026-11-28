@@ -24,3 +24,29 @@ directory.
 The provided `fetch_from_upstream.sh` script can be used to copy and process a
 new Toolkit release into this repository.  It does some cleaning and formatting
 of the Toolkit source files to make them more uniform.
+
+Run using uv local installation (for developers)
+================================================
+
+```bash
+uv venv
+. .venv/bin/activate
+uv pip install -e .
+
+# Run as script
+alif-app-write-mram --help
+alif-update-system-package --help
+
+# Import as python module
+python -m alif_security_toolkit.app-write-mram --help
+python -m alif_security_toolkit.update-system-package --help
+```
+
+Run using uvx (for end users)
+=============================
+
+```bash
+uvx --from git+github.com/micropython/alif-security-toolkit.git alif-app-write-mram --help
+or
+uvx --from git+github.com/micropython/alif-security-toolkit.git alif-update-system-package --help
+```
